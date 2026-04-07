@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /administrator
+Disallow: /profile
+Disallow: /payment-success
+
+Sitemap: https://ais-dev-ysiohn3rwkkqtccelrvfdl-466552621444.asia-southeast1.run.app/sitemap.xml

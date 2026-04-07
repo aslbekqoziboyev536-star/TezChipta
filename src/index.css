@@ -1,0 +1,16 @@
+/* Hide reCAPTCHA badge */
+.grecaptcha-badge { 
+  visibility: hidden !important;
+}
+
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+html {
+  scroll-behavior: smooth;
+}
+
+.grecaptcha-badge { 
+  visibility: hidden !important; 
+}

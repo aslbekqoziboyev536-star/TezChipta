@@ -1,0 +1,5 @@
+{
+  "name": "Tezchipta",
+  "description": "Urganchdan Toshkentga avtobus chiptalarini sotib olish uchun zamonaviy ilova.",
+  "requestFramePermissions": ["geolocation"]
+}

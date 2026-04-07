@@ -1,0 +1,216 @@
+{
+  "entities": {
+    "Driver": {
+      "title": "Driver",
+      "description": "A driver for the transportation service",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "photo": { "type": "string", "format": "uri" },
+        "rating": { "type": "number" },
+        "experience": { "type": "number" },
+        "bio": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "uid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "photo", "rating", "experience", "bio", "phone"]
+    },
+    "Ride": {
+      "title": "Ride",
+      "description": "A scheduled bus ride",
+      "type": "object",
+      "properties": {
+        "busType": { "type": "string" },
+        "departureTime": { "type": "string" },
+        "arrivalTime": { "type": "string" },
+        "duration": { "type": "string" },
+        "price": { "type": "number" },
+        "rating": { "type": "number" },
+        "driverId": { "type": "string" },
+        "date": { "type": "string" },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "completed", "cancelled"] },
+        "images": { "type": "array", "items": { "type": "string", "format": "uri" } }
+      },
+      "required": ["busType", "departureTime", "arrivalTime", "duration", "price", "rating", "driverId", "date", "images", "from", "to", "status"]
+    },
+    "Faq": {
+      "title": "Faq",
+      "description": "Frequently asked question",
+      "type": "object",
+      "properties": {
+        "question": { "type": "string" },
+        "answer": { "type": "string" }
+      },
+      "required": ["question", "answer"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A registered user of the application",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "user", "driver"] },
+        "phoneNumber": { "type": "string" },
+        "birthDate": { "type": "string", "format": "date" },
+        "passport": { "type": "string" },
+        "address": { "type": "string" },
+        "isProfileComplete": { "type": "boolean" },
+        "gender": { "type": "string", "enum": ["male", "female"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "role"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "A ride booking made by a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "rideId": { "type": "string" },
+        "seatNumber": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "cancelled"] },
+        "paymentStatus": { "type": "string", "enum": ["unpaid", "paid", "pending_review", "rejected"] },
+        "paymentMethod": { "type": "string", "enum": ["stripe", "manual"] },
+        "receiptUrl": { "type": "string" },
+        "receiptUploadedAt": { "type": "string", "format": "date-time" },
+        "stripeSessionId": { "type": "string" },
+        "passengerGender": { "type": "string", "enum": ["male", "female"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "price": { "type": "number" }
+      },
+      "required": ["userId", "rideId", "seatNumber", "status", "createdAt", "price"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A contact message from a user",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "contact": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string", "enum": ["unread", "read"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "contact", "message", "status", "createdAt"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "A support chat session between a user and admin",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string", "format": "date-time" },
+        "unreadCount": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "closed"] }
+      },
+      "required": ["userId", "userName", "lastMessage", "lastMessageAt", "unreadCount", "status"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A message within a chat session",
+      "type": "object",
+      "properties": {
+        "chatId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["chatId", "senderId", "text", "createdAt"]
+    },
+    "Blog": {
+      "title": "Blog",
+      "description": "A blog post written by a driver or admin",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "image": { "type": "string", "format": "uri" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["title", "content", "authorId", "authorName", "createdAt"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "A user review/testimonial",
+      "type": "object",
+      "properties": {
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string", "format": "uri" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "isFeatured": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" }
+      },
+      "required": ["userName", "rating", "comment", "status", "createdAt"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global application settings",
+      "type": "object",
+      "properties": {
+        "adminCardNumber": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["adminCardNumber", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/drivers/{driverId}": {
+      "schema": { "$ref": "#/entities/Driver" },
+      "description": "Collection of drivers"
+    },
+    "/rides/{rideId}": {
+      "schema": { "$ref": "#/entities/Ride" },
+      "description": "Collection of rides"
+    },
+    "/faqs/{faqId}": {
+      "schema": { "$ref": "#/entities/Faq" },
+      "description": "Collection of FAQs"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Collection of users"
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Collection of bookings"
+    },
+    "/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Collection of contact messages"
+    },
+    "/chats/{chatId}": {
+      "schema": { "$ref": "#/entities/Chat" },
+      "description": "Collection of support chats"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Subcollection of messages within a chat"
+    },
+    "/blogs/{blogId}": {
+      "schema": { "$ref": "#/entities/Blog" },
+      "description": "Collection of blog posts"
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/Review" },
+      "description": "Collection of user reviews"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/Settings" },
+      "description": "Global settings document"
+    }
+  }
+}
