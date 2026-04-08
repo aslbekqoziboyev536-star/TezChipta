@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button } from './ui/Button';
-import { Menu, X, Home, User, ShieldCheck, LogOut, Info, MessageCircle, HelpCircle, Newspaper, TrendingUp, Ticket, Languages, Check, Bell } from 'lucide-react';
+import { Menu, X, Home, User, ShieldCheck, LogOut, Info, MessageCircle, HelpCircle, Newspaper, TrendingUp, Ticket, Languages, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { SafeImage } from './SafeImage';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebase';
+
 import { useSettings } from '../context/SettingsContext';
 
 export const FloatingMenu = () => {
@@ -18,21 +17,6 @@ export const FloatingMenu = () => {
   const { language, setLanguage, t } = useLanguage();
   const { logoUrl } = useSettings();
   const navigate = useNavigate();
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
-
-  React.useEffect(() => {
-    if (user?.id) {
-      const q = query(
-        collection(db, 'notifications'),
-        where('userId', '==', user.id),
-        where('isRead', '==', false)
-      );
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        setUnreadNotifications(snapshot.size);
-      });
-      return () => unsubscribe();
-    }
-  }, [user]);
 
   const handleToggle = (e: any) => {
     // Determine side based on button position
@@ -51,7 +35,6 @@ export const FloatingMenu = () => {
     { icon: <Home className="w-5 h-5" />, label: t('menu.home'), path: '/' },
     { icon: <Newspaper className="w-5 h-5" />, label: t('menu.blog'), path: '/blog' },
     { icon: <User className="w-5 h-5" />, label: t('menu.profile'), path: '/profile', auth: true },
-    { icon: <Bell className="w-5 h-5" />, label: t('menu.notifications') || 'Bildirishnomalar', path: '/notifications', auth: true },
     { icon: <ShieldCheck className="w-5 h-5" />, label: t('menu.admin'), path: '/administrator/dashboard', admin: true },
     { icon: <TrendingUp className="w-5 h-5" />, label: t('menu.stats'), path: '/statistics', adminOnly: true },
     { icon: <HelpCircle className="w-5 h-5" />, label: t('menu.help'), path: '/#help' },
@@ -87,9 +70,6 @@ export const FloatingMenu = () => {
         onClick={handleToggle}
         className="fixed bottom-8 left-8 w-14 h-14 bg-emerald-500 text-white rounded-full flex flex-col items-center justify-center gap-1 shadow-lg shadow-emerald-500/30 z-[110] pointer-events-auto cursor-grab active:cursor-grabbing border-2 border-white/20 p-0"
       >
-        {unreadNotifications > 0 && !isOpen && (
-          <div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-emerald-500 animate-pulse z-10" />
-        )}
         <AnimatePresence mode="wait">
           {isOpen ? (
             <motion.div
@@ -156,18 +136,12 @@ export const FloatingMenu = () => {
                       key={index}
                       to={item.path}
                       onClick={() => setIsOpen(false)}
-                      className="flex items-center gap-4 p-4 rounded-2xl text-gray-700 dark:text-gray-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-500 transition-all group relative"
+                      className="flex items-center gap-4 p-4 rounded-2xl text-gray-700 dark:text-gray-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-500 transition-all group"
                     >
-                      <div className="p-2 bg-gray-100 dark:bg-white/5 rounded-lg group-hover:bg-white dark:group-hover:bg-emerald-500/20 transition-colors relative">
+                      <div className="p-2 bg-gray-100 dark:bg-white/5 rounded-lg group-hover:bg-white dark:group-hover:bg-emerald-500/20 transition-colors">
                         {item.icon}
-                        {item.path === '/notifications' && unreadNotifications > 0 && (
-                          <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-[#111827]"></div>
-                        )}
                       </div>
-                      <span className="font-medium flex-1">{item.label}</span>
-                      {item.path === '/notifications' && unreadNotifications > 0 && (
-                        <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">{unreadNotifications}</span>
-                      )}
+                      <span className="font-medium">{item.label}</span>
                     </Link>
                   );
                 })}
@@ -204,10 +178,11 @@ export const FloatingMenu = () => {
                               setLanguage(lang.code);
                               setShowLangMenu(false);
                             }}
-                            className={`w-full flex items-center justify-between p-3 rounded-xl transition-all ${language === lang.code
+                            className={`w-full flex items-center justify-between p-3 rounded-xl transition-all ${
+                              language === lang.code
                                 ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
                                 : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5'
-                              }`}
+                            }`}
                           >
                             <div className="flex items-center gap-3">
                               <span className="text-lg">{lang.flag}</span>

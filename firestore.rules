@@ -197,7 +197,7 @@ service cloud.firestore {
              data.price is number && data.price >= 0 &&
              (!('paymentStatus' in data) || data.paymentStatus in ['unpaid', 'paid', 'pending_review', 'rejected']) &&
              (!('paymentMethod' in data) || data.paymentMethod in ['stripe', 'manual']) &&
-             (!('receiptUrl' in data) || (isValidUrl(data.receiptUrl) && data.receiptUrl.size() < 2000)) &&
+             (!('receiptUrl' in data) || (isValidUrl(data.receiptUrl) && data.receiptUrl.size() < 1048576)) &&
              (!('receiptUploadedAt' in data) || data.receiptUploadedAt is string) &&
              (!('stripeSessionId' in data) || data.stripeSessionId is string) &&
              (!('updatedAt' in data) || data.updatedAt is string) &&
@@ -224,12 +224,21 @@ service cloud.firestore {
              data.status in ['unread', 'read'];
     }
 
+    function isValidNewsletterSubscriber(data) {
+      return hasOnlyAllowedFields(['email', 'emailLower', 'createdAt', 'source', 'userId']) &&
+             hasRequiredFields(['email', 'emailLower', 'createdAt']) &&
+             isValidEmail(data.email) &&
+             data.emailLower is string && data.emailLower.size() > 0 && data.emailLower.size() < 200 &&
+             data.createdAt is string && data.createdAt.size() > 0 &&
+             (!('source' in data) || (data.source is string && data.source.size() < 100)) &&
+             (!('userId' in data) || (data.userId is string && data.userId.size() < 200));
+    }
+
     function isValidChat(data) {
-      return hasOnlyAllowedFields(['userId', 'userName', 'userEmail', 'lastMessage', 'lastMessageAt', 'unreadCount', 'userUnreadCount', 'status']) &&
+      return hasOnlyAllowedFields(['userId', 'userName', 'lastMessage', 'lastMessageAt', 'unreadCount', 'userUnreadCount', 'status']) &&
              hasRequiredFields(['userId', 'userName', 'lastMessage', 'lastMessageAt', 'unreadCount', 'status']) &&
              data.userId is string && data.userId.size() > 0 &&
              data.userName is string && data.userName.size() > 0 &&
-             (!('userEmail' in data) || data.userEmail is string) &&
              data.lastMessage is string && data.lastMessage.size() < 1000 &&
              data.lastMessageAt is string && data.lastMessageAt.size() > 0 &&
              data.unreadCount is number && data.unreadCount >= 0 &&
@@ -260,33 +269,9 @@ service cloud.firestore {
              (!('isFeatured' in data) || data.isFeatured is bool);
     }
 
-    function isValidNotification(data) {
-      return hasOnlyAllowedFields(['userId', 'title', 'message', 'type', 'isRead', 'createdAt', 'link']) &&
-             hasRequiredFields(['userId', 'title', 'message', 'type', 'isRead', 'createdAt']) &&
-             data.userId is string && data.userId.size() > 0 &&
-             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
-             data.message is string && data.message.size() > 0 && data.message.size() < 2000 &&
-             data.type in ['info', 'alert', 'success'] &&
-             data.isRead is bool &&
-             data.createdAt is string && data.createdAt.size() > 0 &&
-             (!('link' in data) || data.link is string);
-    }
-
-    function isValidSubscriber(data) {
-      return hasOnlyAllowedFields(['email', 'createdAt']) &&
-             hasRequiredFields(['email', 'createdAt']) &&
-             isValidEmail(data.email) &&
-             data.createdAt is string;
-    }
-
     // ===============================================================
     // Rules
     // ===============================================================
-
-    match /subscribers/{subscriberId} {
-      allow read, delete: if isAdmin();
-      allow create: if isServer(request.resource.data) || isValidSubscriber(request.resource.data);
-    }
 
     match /reviews/{reviewId} {
       allow read: if resource.data.status == 'approved' || isAdmin();
@@ -337,6 +322,13 @@ service cloud.firestore {
       allow delete: if isServer(resource.data) || isAdmin();
     }
 
+    match /newsletter_subscribers/{subscriberId} {
+      allow read: if isAdmin();
+      allow create: if isValidNewsletterSubscriber(request.resource.data);
+      allow update: if isAdmin() && isValidNewsletterSubscriber(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
     match /chats/{chatId} {
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isServer(request.resource.data) || (isAuthenticated() && isValidChat(request.resource.data) && (request.resource.data.userId == request.auth.uid || isAdmin()));
@@ -364,13 +356,6 @@ service cloud.firestore {
     match /settings/{settingId} {
       allow read: if true;
       allow write: if isServer(request.resource.data) || isAdmin();
-    }
-
-    match /notifications/{notificationId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isServer(request.resource.data) || (isAuthenticated() && isAdmin() && isValidNotification(request.resource.data));
-      allow update: if isServer(request.resource.data) || (isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidNotification(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdmin();
     }
   }
 }

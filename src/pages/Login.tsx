@@ -14,7 +14,6 @@ import { ConfirmationResult } from 'firebase/auth';
 
 import { getFirebaseErrorMessage } from '../utils/firebaseErrors';
 import { toast } from 'sonner';
-import { LoadingScreen } from '../components/LoadingScreen';
 
 export default function Login() {
   const { t } = useLanguage();
@@ -26,10 +25,7 @@ export default function Login() {
   const [phoneNumber, setPhoneNumber] = useState('+998');
   const [verificationCode, setVerificationCode] = useState('');
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
-
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(false);
-
+  
   const navigate = useNavigate();
   const { loginWithGoogle, loginWithEmail, loginWithPhone, user } = useAuth();
   const { loading, error, execute, reset } = useAsync();
@@ -42,13 +38,10 @@ export default function Login() {
 
   const handleGoogleLogin = async () => {
     reset();
-    setIsGoogleLoading(true);
     try {
       await execute(() => loginWithGoogle());
-      setIsRedirecting(true);
       toast.success("Welcome back!");
     } catch (err: any) {
-      setIsGoogleLoading(false);
       if (err.code === 'auth/popup-closed-by-user' || err.message?.includes('auth/popup-closed-by-user')) {
         reset();
         return;
@@ -69,7 +62,6 @@ export default function Login() {
 
     try {
       await execute(() => loginWithEmail(email, password));
-      setIsRedirecting(true);
       toast.success("Welcome back!");
     } catch (err: any) {
       console.error("Email login error:", err);
@@ -99,11 +91,10 @@ export default function Login() {
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!confirmationResult) return;
-
+    
     reset();
     try {
       await execute(() => confirmationResult.confirm(verificationCode));
-      setIsRedirecting(true);
       toast.success("Welcome back!");
     } catch (err: any) {
       console.error("Verification error:", err);
@@ -111,16 +102,12 @@ export default function Login() {
     }
   };
 
-  if (isGoogleLoading || isRedirecting) {
-    return <LoadingScreen message="Hisobga kirilmoqda..." />;
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-[#0B1120] flex flex-col justify-center py-6 sm:py-12 px-4 sm:px-6 lg:px-8 transition-colors duration-300">
       <div className="absolute top-4 right-4 sm:top-8 sm:right-8 z-10">
         <ThemeToggle />
       </div>
-
+      
       <div className="absolute top-4 left-4 sm:top-8 sm:left-8 z-10">
         <Link to="/" className="flex items-center text-gray-500 hover:text-emerald-500 dark:text-gray-400 dark:hover:text-white transition-colors">
           <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2" />

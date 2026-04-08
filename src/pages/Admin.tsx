@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { Button } from '../components/ui/Button';
-import { LayoutDashboard, Bus, Users, Settings, LogOut, Plus, Edit2, Trash2, Star, HelpCircle, Database, X, Moon, Sun, MessageCircle, Mail, Send, Search, CloudSun, CreditCard, TrendingUp, ShieldCheck, User, Copy, Clock, Menu, Bell } from 'lucide-react';
+import { LayoutDashboard, Bus, Users, Settings, LogOut, Plus, Edit2, Trash2, Star, HelpCircle, Database, X, Moon, Sun, MessageCircle, Mail, Search, CloudSun, CreditCard, TrendingUp, ShieldCheck, User, Copy, Clock, Menu, ChevronRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { collection, getDocs, doc, deleteDoc, addDoc, updateDoc, setDoc, query, orderBy, onSnapshot, increment, where } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc, addDoc, updateDoc, setDoc, query, orderBy, onSnapshot, increment, where, limit } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { isValidPhone } from '../utils/validation';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -12,17 +13,18 @@ import { WeatherWidget } from '../components/WeatherWidget';
 import { SafeImage } from '../components/SafeImage';
 import { toast } from 'sonner';
 import { useLanguage } from '../context/LanguageContext';
+import * as XLSX from 'xlsx';
 
 export default function Admin() {
   const { user, loading: authLoading, logout } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
   const { tab } = useParams<{ tab: string }>();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'rides' | 'drivers' | 'faqs' | 'users' | 'messages' | 'chats' | 'settings' | 'reviews' | 'payments' | 'notifications' | 'newsletters'>((tab as any) || 'dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'rides' | 'drivers' | 'faqs' | 'users' | 'messages' | 'newsletter' | 'chats' | 'notifications' | 'settings' | 'reviews' | 'payments'>((tab as any) || 'dashboard');
 
   useEffect(() => {
     if (tab) {
-      const validTabs = ['dashboard', 'rides', 'drivers', 'faqs', 'users', 'messages', 'chats', 'settings', 'reviews', 'payments', 'notifications', 'newsletters'];
+      const validTabs = ['dashboard', 'rides', 'drivers', 'faqs', 'users', 'messages', 'newsletter', 'chats', 'notifications', 'settings', 'reviews', 'payments'];
       if (validTabs.includes(tab)) {
         setActiveTab(tab as any);
       } else {
@@ -43,19 +45,10 @@ export default function Admin() {
   const [faqs, setFaqs] = useState<any[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
+  const [newsletterSubscribers, setNewsletterSubscribers] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
   const [chats, setChats] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
-  const [subscribers, setSubscribers] = useState<any[]>([]);
-  const [myDriverId, setMyDriverId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  // Form states
-  const [notificationForm, setNotificationForm] = useState({ title: '', message: '', target: 'all', type: 'info' });
-  const [sendingNotification, setSendingNotification] = useState(false);
-  const [newsletterForm, setNewsletterForm] = useState({ subject: '', body: '' });
-  const [sendingNewsletter, setSendingNewsletter] = useState(false);
   const [adminCardNumber, setAdminCardNumber] = useState('');
   const [logoUrl, setLogoUrl] = useState('https://imagehosting-hulf.onrender.com/uploads/743d26dac03143284afd0f450db04d85.png');
   const [adminCardOwner, setAdminCardOwner] = useState('');
@@ -69,88 +62,24 @@ export default function Admin() {
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [adminChatInput, setAdminChatInput] = useState('');
   const [chatSearchQuery, setChatSearchQuery] = useState('');
+  const [newsletterSearchQuery, setNewsletterSearchQuery] = useState('');
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotificationForm, setShowNotificationForm] = useState(false);
+  const [notificationForm, setNotificationForm] = useState({ title: '', message: '', target: 'all' as 'all' | 'newcomers' });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
   const [formLoading, setFormLoading] = useState(false);
   const [messageLoading, setMessageLoading] = useState<string | null>(null);
   const [chatLoading, setChatLoading] = useState(false);
+  const [myDriverId, setMyDriverId] = useState<string | null>(null);
   const [selectedRideForBookings, setSelectedRideForBookings] = useState<any | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const isSubmittingNotifRef = useRef(false);
+  const [showCardSettings, setShowCardSettings] = useState(false);
+  const [showNewsletterForm, setShowNewsletterForm] = useState(false);
+  const [newsletterForm, setNewsletterForm] = useState({ subject: '', content: '' });
 
-  const handleSendNotification = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSendingNotification(true);
-    try {
-      let targetUsers = usersList;
-      if (notificationForm.target === 'newcomers') {
-        const twoDaysAgo = new Date();
-        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-
-        targetUsers = usersList.filter(u => {
-          const joinDate = u.createdAt ? new Date(u.createdAt) : null;
-          const isRecent = joinDate && joinDate >= twoDaysAgo;
-          const hasBookings = bookings.some(b => b.userId === u.id);
-          return isRecent || !hasBookings;
-        });
-      }
-
-      if (targetUsers.length === 0) {
-        toast.warning("Ushbu filtr bo'yicha foydalanuvchilar topilmadi.");
-        setSendingNotification(false);
-        return;
-      }
-
-      const batchSize = 100;
-      for (let i = 0; i < targetUsers.length; i += batchSize) {
-        const batchUsers = targetUsers.slice(i, i + batchSize);
-        await Promise.all(batchUsers.map(userItem => {
-          return addDoc(collection(db, 'notifications'), {
-            userId: userItem.id,
-            title: notificationForm.title,
-            message: notificationForm.message,
-            type: notificationForm.type,
-            isRead: false,
-            createdAt: new Date().toISOString()
-          });
-        }));
-      }
-
-      toast.success(`${targetUsers.length} ta foydalanuvchiga bildirishnoma yuborildi!`);
-      setNotificationForm({ title: '', message: '', target: 'all', type: 'info' });
-    } catch (err: any) {
-      console.error("Xatolik:", err);
-      toast.error("Bildirishnoma yuborishda xatolik yuz berdi");
-    } finally {
-      setSendingNotification(false);
-    }
-  };
-
-  const handleSendNewsletter = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newsletterForm.subject || !newsletterForm.body || subscribers.length === 0) {
-      toast.error("Mavzu, xabar va obunachilar bo'lishi shart!");
-      return;
-    }
-
-    setSendingNewsletter(true);
-    try {
-      const emailList = subscribers.map(s => s.email).join(',');
-      const subject = encodeURIComponent(newsletterForm.subject);
-      const body = encodeURIComponent(newsletterForm.body);
-
-      // Using bcc for privacy
-      const mailtoUrl = `mailto:?bcc=${emailList}&subject=${subject}&body=${body}`;
-
-      window.open(mailtoUrl, '_blank');
-
-      toast.success("Gmail ochilmoqda. Xabarni yuborishni unutmang!");
-      setNewsletterForm({ subject: '', body: '' });
-    } catch (error) {
-      console.error("Error sending newsletter:", error);
-      toast.error("Xatolik yuz berdi");
-    } finally {
-      setSendingNewsletter(false);
-    }
-  };
-
+  // Form states
   const [showFaqForm, setShowFaqForm] = useState(false);
   const [faqForm, setFaqForm] = useState({ id: '', question: '', answer: '' });
 
@@ -232,8 +161,9 @@ export default function Admin() {
       const bookingsCol = collection(db, 'bookings');
       const reviewsCol = collection(db, 'reviews');
       const settingsCol = collection(db, 'settings');
+      const notificationsCol = collection(db, 'notifications');
 
-      let ridesSnapshot, driversSnapshot, faqsSnapshot, usersSnapshot, messagesSnapshot, bookingsSnapshot, reviewsSnapshot, settingsSnapshot, subscribersSnapshot;
+      let ridesSnapshot, driversSnapshot, faqsSnapshot, usersSnapshot, messagesSnapshot, bookingsSnapshot, reviewsSnapshot, settingsSnapshot, notificationsSnapshot;
       try {
         const promises = [
           getDocs(ridesCol),
@@ -247,13 +177,11 @@ export default function Admin() {
           promises.push(getDocs(usersCol));
           promises.push(getDocs(messagesCol));
           promises.push(getDocs(reviewsCol));
-          promises.push(getDocs(collection(db, 'subscribers')));
         } else {
           // Drivers only need approved reviews, or maybe no reviews at all. Let's fetch approved reviews for them if needed, or just empty.
           promises.push(Promise.resolve({ docs: [] } as any)); // users
           promises.push(Promise.resolve({ docs: [] } as any)); // messages
           promises.push(getDocs(query(reviewsCol, where('status', '==', 'approved')))); // reviews
-          promises.push(Promise.resolve({ docs: [] } as any)); // subscribers
         }
 
         const results = await Promise.all(promises);
@@ -265,7 +193,6 @@ export default function Admin() {
         usersSnapshot = results[5];
         messagesSnapshot = results[6];
         reviewsSnapshot = results[7];
-        subscribersSnapshot = results[8];
 
       } catch (err) {
         handleFirestoreError(err, OperationType.GET, 'multiple collections');
@@ -279,7 +206,6 @@ export default function Admin() {
       const messagesData = messagesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const bookingsData = bookingsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const reviewsData = reviewsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const subscribersData = subscribersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
       const paymentSettings = settingsSnapshot.docs.find(d => d.id === 'payment')?.data();
       if (paymentSettings) {
@@ -303,7 +229,20 @@ export default function Admin() {
       setMessages(messagesData);
       setBookings(bookingsData);
       setReviews(reviewsData);
-      setSubscribers(subscribersData);
+
+      if (user?.role === 'admin') {
+        try {
+          const newsletterSnapshot = await getDocs(
+            query(collection(db, 'newsletter_subscribers'), orderBy('createdAt', 'desc'))
+          );
+          const newsletterData = newsletterSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setNewsletterSubscribers(newsletterData);
+        } catch (err) {
+          handleFirestoreError(err, OperationType.GET, 'newsletter_subscribers');
+        }
+      } else {
+        setNewsletterSubscribers([]);
+      }
 
       // If user is a driver, find their driver document ID
       if (user?.role === 'driver') {
@@ -333,10 +272,66 @@ export default function Admin() {
     }
 
     fetchFirestoreData();
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, activeTab]);
+
+  useEffect(() => {
+    if (!user || user.role !== 'admin') return;
+    const notificationsRef = collection(db, 'notifications');
+    const q = query(notificationsRef, orderBy('createdAt', 'desc'), limit(50));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      // Use a Map with a content-based key to filter out identical notifications
+      // found in the last 50 entries (even if they have different IDs).
+      const uniqueDocs = new Map();
+
+      snapshot.docs.forEach(doc => {
+        const d = doc.data();
+        // Create a unique key based on content. We include a rounded timestamp (e.g. 1 minute) 
+        // if we want to allow repeats after some time, but for now strict content dedup is safer.
+        const contentKey = `${d.title}|${d.message}|${d.target}`;
+
+        if (!uniqueDocs.has(contentKey)) {
+          uniqueDocs.set(contentKey, { id: doc.id, ...d });
+        }
+      });
+
+      const data = Array.from(uniqueDocs.values());
+      setNotifications(data);
+    });
+    return () => unsubscribe();
+  }, [user?.role]);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('uz-UZ').format(price) + " so'm";
+  };
+
+  const filteredNewsletterSubscribers = newsletterSubscribers.filter((subscriber) => {
+    const queryValue = newsletterSearchQuery.trim().toLowerCase();
+    if (!queryValue) return true;
+    const email = (subscriber.email || '').toLowerCase();
+    const userId = (subscriber.userId || '').toLowerCase();
+    const source = (subscriber.source || '').toLowerCase();
+    return email.includes(queryValue) || userId.includes(queryValue) || source.includes(queryValue);
+  });
+
+  const handleDownloadNewsletterExcel = () => {
+    if (filteredNewsletterSubscribers.length === 0) {
+      toast.error("Eksport qilish uchun obunachilar topilmadi.");
+      return;
+    }
+
+    const rows = filteredNewsletterSubscribers.map((subscriber: any, index: number) => ({
+      '#': index + 1,
+      Email: subscriber.email || '',
+      'Obuna sanasi': subscriber.createdAt ? new Date(subscriber.createdAt).toLocaleString('uz-UZ') : '',
+      Manba: subscriber.source || '',
+      'User ID': subscriber.userId || ''
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Newsletter');
+    const fileName = `newsletter_subscribers_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
   };
 
   const handleDelete = async (collectionName: string, id: string) => {
@@ -832,13 +827,64 @@ export default function Admin() {
     }
   };
 
-  const handleStartChatWithUser = async (targetUser: any) => {
-    const userId = targetUser.id || targetUser.uid;
-    if (!userId) {
-      toast.error("Foydalanuvchi ID topilmadi");
-      return;
+  const handleSendNotification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!notificationForm.title || !notificationForm.message || !user || isSubmittingNotifRef.current) return;
+
+    isSubmittingNotifRef.current = true;
+    setFormLoading(true);
+    try {
+      const notificationData = {
+        title: notificationForm.title,
+        message: notificationForm.message,
+        target: notificationForm.target,
+        createdAt: new Date().toISOString(),
+        senderId: user.id
+      };
+
+      await addDoc(collection(db, 'notifications'), notificationData);
+      setShowNotificationForm(false);
+      setNotificationForm({ title: '', message: '', target: 'all' });
+      toast.success("Bildirishnoma muvaffaqiyatli yuborildi");
+    } catch (error) {
+      console.error("Error sending notification:", error);
+      toast.error("Bildirishnoma yuborishda xatolik yuz berdi");
+    } finally {
+      setFormLoading(false);
+      isSubmittingNotifRef.current = false;
     }
-    const existingChat = chats.find(c => c.userId === userId);
+  };
+
+  const handleSendNewsletter = async () => {
+    if (!newsletterForm.subject || !newsletterForm.content || filteredNewsletterSubscribers.length === 0) return;
+
+    setFormLoading(true);
+    try {
+      // In a real-world scenario, you would call a backend API or a Cloud Function here.
+      // For this implementation, we'll simulate the broadcast by creating a 'newsletter_history' entry.
+      const broadcastData = {
+        subject: newsletterForm.subject,
+        content: newsletterForm.content,
+        sentAt: new Date().toISOString(),
+        subscriberCount: filteredNewsletterSubscribers.length,
+        recipients: filteredNewsletterSubscribers.map(s => s.email).filter(Boolean)
+      };
+
+      await addDoc(collection(db, 'newsletter_history'), broadcastData);
+
+      toast.success(`${filteredNewsletterSubscribers.length} ta obunachiga xabar yuborildi!`);
+      setShowNewsletterForm(false);
+      setNewsletterForm({ subject: '', content: '' });
+    } catch (error) {
+      console.error("Error sending newsletter:", error);
+      toast.error("Xabar yuborishda xatolik yuz berdi");
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  const handleStartChatWithUser = async (targetUser: any) => {
+    const existingChat = chats.find(c => c.userId === targetUser.id);
 
     if (existingChat) {
       setSelectedChatId(existingChat.id);
@@ -846,25 +892,16 @@ export default function Admin() {
     } else {
       try {
         const newChat = {
-          userId: userId,
+          userId: targetUser.id,
           userName: targetUser.name || 'Foydalanuvchi',
           userEmail: targetUser.email || '',
           lastMessage: 'Suhbat boshlandi',
           lastMessageAt: new Date().toISOString(),
           unreadCount: 0,
-          userUnreadCount: 1,
+          userUnreadCount: 0,
           status: 'active'
         };
         const docRef = await addDoc(collection(db, 'chats'), newChat);
-
-        await addDoc(collection(db, 'chats', docRef.id, 'messages'), {
-          chatId: docRef.id,
-          senderId: user?.id || 'admin',
-          text: 'Suhbat boshlandi',
-          isAdmin: true,
-          createdAt: new Date().toISOString()
-        });
-
         setSelectedChatId(docRef.id);
         handleTabChange('chats');
       } catch (error) {
@@ -1039,6 +1076,20 @@ export default function Admin() {
               </Button>
               <Button
                 variant="secondary"
+                onClick={() => handleTabChange('newsletter')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'newsletter' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+                  }`}
+                leftIcon={<Mail className="w-5 h-5" />}
+              >
+                Newsletter
+                {newsletterSubscribers.length > 0 && (
+                  <span className="ml-auto bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {newsletterSubscribers.length}
+                  </span>
+                )}
+              </Button>
+              <Button
+                variant="secondary"
                 onClick={() => handleTabChange('chats')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'chats' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
                   }`}
@@ -1050,6 +1101,15 @@ export default function Admin() {
                     {chats.reduce((acc, chat) => acc + (chat.unreadCount || 0), 0)}
                   </span>
                 )}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => handleTabChange('notifications')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'notifications' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+                  }`}
+                leftIcon={<Mail className="w-5 h-5" />}
+              >
+                Bildirishnomalar
               </Button>
               <Button
                 variant="secondary"
@@ -1067,24 +1127,6 @@ export default function Admin() {
               </Button>
               <Button
                 variant="secondary"
-                onClick={() => handleTabChange('notifications')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'notifications' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
-                  }`}
-                leftIcon={<Bell className="w-5 h-5" />}
-              >
-                Bildirishnomalar
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => handleTabChange('newsletters')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'newsletters' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
-                  }`}
-                leftIcon={<Mail className="w-5 h-5" />}
-              >
-                Newsletter
-              </Button>
-              <Button
-                variant="secondary"
                 onClick={() => handleTabChange('payments')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'payments' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
                   }`}
@@ -1096,15 +1138,6 @@ export default function Admin() {
                     {bookings.filter(b => b.paymentMethod === 'manual' && b.paymentStatus === 'pending_review').length}
                   </span>
                 )}
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => handleTabChange('notifications')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'notifications' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
-                  }`}
-                leftIcon={<Bell className="w-5 h-5" />}
-              >
-                {t('admin.notifications') || 'Bildirishnomalar'}
               </Button>
             </>
           )}
@@ -1183,8 +1216,12 @@ export default function Admin() {
                   activeTab === 'faqs' ? 'FAQlar' :
                     activeTab === 'users' ? 'Foydalanuvchilar' :
                       activeTab === 'messages' ? 'Xabarlar' :
-                        activeTab === 'chats' ? 'Chatlar' :
-                          activeTab === 'reviews' ? 'Fikrlar' : 'Sozlamalar'}
+                        activeTab === 'newsletter' ? 'Newsletter' :
+                          activeTab === 'chats' ? 'Chatlar' :
+                            activeTab === 'notifications' ? 'Bildirishnomalar' :
+                              activeTab === 'reviews' ? 'Fikrlar' :
+                                activeTab === 'payments' ? "To'lovlar" :
+                                  'Sozlamalar'}
           </h2>
           {user?.role === 'admin' && (
             <div className="flex items-center gap-2 sm:gap-4">
@@ -1884,14 +1921,16 @@ export default function Admin() {
                               </select>
                             </td>
                             <td className="p-4 text-sm flex items-center gap-2">
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => handleStartChatWithUser(u)}
-                                className="p-2 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
-                                leftIcon={<MessageCircle className="w-4 h-4" />}
-                                title={t('admin.users.send_message') || "Xabar yozish"}
-                              />
+                              {u.id !== user?.id && (
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => handleStartChatWithUser(u)}
+                                  className="p-2 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
+                                  leftIcon={<MessageCircle className="w-4 h-4" />}
+                                  title={t('admin.users.send_message') || "Xabar yozish"}
+                                />
+                              )}
                               <Button
                                 variant="secondary"
                                 size="sm"
@@ -1966,6 +2005,141 @@ export default function Admin() {
                     Hozircha xabarlar yo'q.
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'newsletter' && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                    Jami: <span className="font-bold text-gray-900 dark:text-white">{filteredNewsletterSubscribers.length} ta</span>
+                  </div>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                  <div className="relative w-full sm:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Email yoki user ID..."
+                      value={newsletterSearchQuery}
+                      onChange={(e) => setNewsletterSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-white dark:bg-[#111827] border border-gray-200 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => setShowNewsletterForm(!showNewsletterForm)}
+                    className="px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-semibold rounded-xl h-auto"
+                    leftIcon={showNewsletterForm ? <X className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
+                  >
+                    {showNewsletterForm ? "Bekor qilish" : "Xabar yozish"}
+                  </Button>
+                  <Button
+                    onClick={handleDownloadNewsletterExcel}
+                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-xl h-auto"
+                    leftIcon={<Mail className="w-4 h-4" />}
+                  >
+                    Excel yuklab olish
+                  </Button>
+                </div>
+              </div>
+
+              {showNewsletterForm && (
+                <div className="bg-white dark:bg-[#111827] rounded-3xl shadow-xl border border-gray-100 dark:border-white/5 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
+                  <div className="p-6 border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-white/5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center">
+                        <Mail className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Yangi xabar yaratish</h3>
+                        <p className="text-xs text-gray-500">{filteredNewsletterSubscribers.length} ta obunachiga yuboriladi</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-6 space-y-6">
+                    <div className="space-y-4">
+                      {/* Subject */}
+                      <div className="relative group">
+                        <label className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1 block ml-1">Subject / Mavzu</label>
+                        <input
+                          type="text"
+                          value={newsletterForm.subject}
+                          onChange={(e) => setNewsletterForm({ ...newsletterForm, subject: e.target.value })}
+                          placeholder="Gmail kabi mavzu kiriting..."
+                          className="w-full px-5 py-4 bg-gray-50 dark:bg-[#0B1120] border border-gray-200 dark:border-white/10 rounded-2xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all placeholder:text-gray-400"
+                        />
+                      </div>
+
+                      {/* Content */}
+                      <div className="relative group">
+                        <label className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1 block ml-1">Context / Xabar matni</label>
+                        <textarea
+                          value={newsletterForm.content}
+                          onChange={(e) => setNewsletterForm({ ...newsletterForm, content: e.target.value })}
+                          placeholder="Xabar matnini bu yerga yozing..."
+                          rows={8}
+                          className="w-full px-5 py-4 bg-gray-50 dark:bg-[#0B1120] border border-gray-200 dark:border-white/10 rounded-2xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all resize-none placeholder:text-gray-400"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-2">
+                      <Button
+                        variant="secondary"
+                        onClick={() => setShowNewsletterForm(false)}
+                        className="px-6 py-3 rounded-xl border-gray-200 dark:border-white/10"
+                      >
+                        Bekor qilish
+                      </Button>
+                      <Button
+                        onClick={handleSendNewsletter}
+                        loading={formLoading}
+                        disabled={!newsletterForm.subject || !newsletterForm.content}
+                        className="px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20"
+                        leftIcon={<Plus className="w-5 h-5 rotate-45" />}
+                      >
+                        Yuborish
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-white dark:bg-[#111827] rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-white/5 border-b border-gray-100 dark:border-white/5">
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Email</th>
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Sana</th>
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Manba</th>
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">User ID</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                      {filteredNewsletterSubscribers.map((subscriber: any) => (
+                        <tr key={subscriber.id} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                          <td className="p-4 text-sm font-medium text-gray-900 dark:text-white">{subscriber.email || '-'}</td>
+                          <td className="p-4 text-sm text-gray-600 dark:text-gray-400">
+                            {subscriber.createdAt ? new Date(subscriber.createdAt).toLocaleString('uz-UZ') : '-'}
+                          </td>
+                          <td className="p-4 text-sm text-gray-600 dark:text-gray-400">{subscriber.source || '-'}</td>
+                          <td className="p-4 text-xs text-gray-500 dark:text-gray-400">{subscriber.userId || '-'}</td>
+                        </tr>
+                      ))}
+                      {filteredNewsletterSubscribers.length === 0 && (
+                        <tr>
+                          <td className="p-8 text-center text-gray-500 dark:text-gray-400" colSpan={4}>
+                            Hozircha obunachilar yo'q.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -2126,6 +2300,93 @@ export default function Admin() {
             </div>
           )}
 
+          {activeTab === 'notifications' && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="hidden md:block" />
+                <Button
+                  onClick={() => setShowNotificationForm(!showNotificationForm)}
+                  className="flex items-center gap-2 w-fit"
+                  leftIcon={showNotificationForm ? <X className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                >
+                  {showNotificationForm ? t('admin.notifications.cancel') : t('admin.notifications.new')}
+                </Button>
+              </div>
+
+              {showNotificationForm && (
+                <div className="bg-white dark:bg-[#111827] p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5">
+                  <h3 className="text-lg font-bold mb-4 text-gray-900 dark:text-white">{t('admin.notifications.form_title')}</h3>
+                  <form onSubmit={handleSendNotification} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('admin.notifications.title_label')}</label>
+                      <input
+                        type="text"
+                        required
+                        value={notificationForm.title}
+                        onChange={e => setNotificationForm({ ...notificationForm, title: e.target.value })}
+                        className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                        placeholder={t('admin.notifications.title_label')}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('admin.notifications.message_label')}</label>
+                      <textarea
+                        required
+                        value={notificationForm.message}
+                        onChange={e => setNotificationForm({ ...notificationForm, message: e.target.value })}
+                        rows={4}
+                        className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                        placeholder={t('admin.notifications.message_label')}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('admin.notifications.target_label')}</label>
+                      <select
+                        value={notificationForm.target}
+                        onChange={e => setNotificationForm({ ...notificationForm, target: e.target.value as 'all' | 'newcomers' })}
+                        className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                      >
+                        <option value="all">{t('admin.notifications.target_all')}</option>
+                        <option value="newcomers">{t('admin.notifications.target_newcomers')}</option>
+                      </select>
+                    </div>
+                    <Button type="submit" loading={formLoading} className="h-auto">{t('admin.notifications.send')}</Button>
+                  </form>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-4">
+                {notifications.map((notif) => (
+                  <div key={notif.id} className="bg-white dark:bg-[#111827] p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5">
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="font-bold text-gray-900 dark:text-white">{notif.title}</h4>
+                      <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase ${notif.target === 'all' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10' : 'bg-blue-100 text-blue-600 dark:bg-blue-500/10'}`}>
+                        {notif.target === 'all' ? 'Hamma' : 'Yangi kelganlar'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{notif.message}</p>
+                    <div className="flex items-center justify-between text-[10px] text-gray-400">
+                      <span>{new Date(notif.createdAt).toLocaleString('uz-UZ')}</span>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setDeleteConfirm({ isOpen: true, collectionName: 'notifications', id: notif.id })}
+                        className="p-1 text-gray-400 hover:text-red-500 border-0 h-auto"
+                        leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+                      />
+                    </div>
+                  </div>
+                ))}
+                {notifications.length === 0 && (
+                  <div className="text-center py-20 bg-white dark:bg-[#111827] rounded-2xl border border-dashed border-gray-200 dark:border-white/10">
+                    <Mail className="w-16 h-16 text-gray-300 dark:text-gray-700 mx-auto mb-4 opacity-20" />
+                    <p className="text-gray-500 dark:text-gray-400">{t('admin.notifications.empty')}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {activeTab === 'reviews' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between md:hidden">
@@ -2237,129 +2498,151 @@ export default function Admin() {
 
           {activeTab === 'settings' && (
             <div className="space-y-6">
+              {/* Main Settings Card */}
               <div className="bg-white dark:bg-[#111827] p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5">
-                <div className="flex items-center gap-3 mb-8">
-                  <CreditCard className="w-6 h-6 text-emerald-500" />
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Karta ma'lumotlari</h3>
-                </div>
-
-                <div className="space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Karta raqami</label>
-                    <select
-                      value={adminCardNumber}
-                      onChange={(e) => setAdminCardNumber(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all appearance-none"
+                <div className="flex flex-col gap-8">
+                  {/* Card Settings Collapsible */}
+                  <div className="border border-gray-100 dark:border-white/5 rounded-2xl overflow-hidden bg-gray-50/30 dark:bg-[#0B1120]/10">
+                    <button
+                      onClick={() => setShowCardSettings(!showCardSettings)}
+                      className="w-full flex items-center justify-between p-6 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors border-0 h-auto"
                     >
-                      <option value="">Karta tanlang...</option>
-                      <option value="8600 1234 5678 9012">8600 1234 5678 9012 (Uzcard)</option>
-                      <option value="9860 1234 5678 9012">9860 1234 5678 9012 (Humo)</option>
-                      <option value="4200 1234 5678 9012">4200 1234 5678 9012 (Visa)</option>
-                      {adminCardNumber && !['8600 1234 5678 9012', '9860 1234 5678 9012', '4200 1234 5678 9012'].includes(adminCardNumber) && (
-                        <option value={adminCardNumber}>{adminCardNumber} (Joriy)</option>
+                      <div className="flex items-center gap-3">
+                        <CreditCard className="w-6 h-6 text-emerald-500" />
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Karta sozlamalari</h3>
+                      </div>
+                      <ChevronRight className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${showCardSettings ? 'rotate-90' : ''}`} />
+                    </button>
+
+                    <AnimatePresence>
+                      {showCardSettings && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.3, ease: 'easeInOut' }}
+                        >
+                          <div className="p-6 border-t border-gray-100 dark:border-white/5 space-y-6">
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Karta raqami</label>
+                              <input
+                                type="text"
+                                value={adminCardNumber}
+                                onChange={handleCardNumberChange}
+                                maxLength={19}
+                                placeholder="0000 0000 0000 0000"
+                                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Karta egasi</label>
+                              <input
+                                type="text"
+                                value={adminCardOwner}
+                                onChange={(e) => setAdminCardOwner(e.target.value)}
+                                placeholder="Masalan: ALISHER UZAKOV"
+                                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                              />
+                            </div>
+                          </div>
+                        </motion.div>
                       )}
-                    </select>
+                    </AnimatePresence>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Sayt Logotipi (URL)</label>
-                    <input
-                      type="text"
-                      value={logoUrl}
-                      onChange={(e) => setLogoUrl(e.target.value)}
-                      placeholder="https://example.com/logo.png"
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Ushbu URL orqali saytdagi barcha logotiplar va favicon o'zgaradi.</p>
-                    {logoUrl && (
-                      <div className="mt-2 p-2 border border-gray-200 dark:border-white/10 rounded-lg inline-block bg-gray-50 dark:bg-[#0B1120]">
-                        <img src={logoUrl} alt="Logo Preview" className="h-10 object-contain" onError={(e) => (e.currentTarget.src = 'https://placehold.co/512x512/10b981/ffffff/png?text=Xato')} />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Egasining ismi</label>
-                    <input
-                      type="text"
-                      value={adminCardOwner}
-                      onChange={(e) => setAdminCardOwner(e.target.value)}
-                      placeholder="ASLBEK QOZIBOYEV"
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Qo'llab-quvvatlash telefoni</label>
-                    <input
-                      type="text"
-                      value={adminSupportPhone}
-                      onChange={(e) => setAdminSupportPhone(e.target.value)}
-                      placeholder="+998 90 000 00 00"
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Sayt tavsifi</label>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(siteDescription);
-                          toast.success("Tavsif nusxalandi");
-                        }}
-                        className="text-emerald-500 hover:text-emerald-600 flex items-center gap-1 text-xs font-medium"
-                      >
-                        <Copy className="w-3 h-3" />
-                        Nusxa olish
-                      </button>
-                    </div>
-                    <textarea
-                      value={siteDescription}
-                      onChange={(e) => setSiteDescription(e.target.value)}
-                      rows={4}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all resize-none"
-                    />
-                  </div>
-
-                  <div className="pt-4 space-y-4">
-                    <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#0B1120]/50 border border-gray-100 dark:border-white/5">
-                      <div>
-                        <div className="font-bold text-gray-900 dark:text-white">Stripe (Onlayn to'lov)</div>
-                        <div className="text-xs text-gray-500">Kredit/debit karta orqali onlayn to'lash</div>
-                      </div>
-                      <button
-                        onClick={() => setStripeEnabled(!stripeEnabled)}
-                        className={`w-12 h-6 rounded-full transition-colors relative ${stripeEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}
-                      >
-                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${stripeEnabled ? 'right-1' : 'left-1'}`} />
-                      </button>
+                  {/* Other Settings */}
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Sayt Logotipi (URL)</label>
+                      <input
+                        type="text"
+                        value={logoUrl}
+                        onChange={(e) => setLogoUrl(e.target.value)}
+                        placeholder="https://example.com/logo.png"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Ushbu URL orqali saytdagi barcha logotiplar va favicon o'zgaradi.</p>
+                      {logoUrl && (
+                        <div className="mt-2 p-2 border border-gray-200 dark:border-white/10 rounded-lg inline-block bg-gray-50 dark:bg-[#0B1120]">
+                          <img src={logoUrl} alt="Logo Preview" className="h-10 object-contain" onError={(e) => (e.currentTarget.src = 'https://placehold.co/512x512/10b981/ffffff/png?text=Xato')} />
+                        </div>
+                      )}
                     </div>
 
-                    <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#0B1120]/50 border border-gray-100 dark:border-white/5">
-                      <div>
-                        <div className="font-bold text-gray-900 dark:text-white">Karta orqali (Manual)</div>
-                        <div className="text-xs text-gray-500">O'tkazma qilib chek yuborish orqali to'lash</div>
-                      </div>
-                      <button
-                        onClick={() => setManualEnabled(!manualEnabled)}
-                        className={`w-12 h-6 rounded-full transition-colors relative ${manualEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}
-                      >
-                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${manualEnabled ? 'right-1' : 'left-1'}`} />
-                      </button>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Qo'llab-quvvatlash telefoni</label>
+                      <input
+                        type="text"
+                        value={adminSupportPhone}
+                        onChange={(e) => setAdminSupportPhone(e.target.value)}
+                        placeholder="+998 90 000 00 00"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                      />
                     </div>
-                  </div>
 
-                  <Button
-                    onClick={handleUpdateSettings}
-                    loading={updatingSettings}
-                    className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg rounded-2xl"
-                  >
-                    Saqlash
-                  </Button>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Sayt tavsifi</label>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(siteDescription);
+                            toast.success("Tavsif nusxalandi");
+                          }}
+                          className="text-emerald-500 hover:text-emerald-600 flex items-center gap-1 text-xs font-medium"
+                        >
+                          <Copy className="w-3 h-3" />
+                          Nusxa olish
+                        </button>
+                      </div>
+                      <textarea
+                        value={siteDescription}
+                        onChange={(e) => setSiteDescription(e.target.value)}
+                        rows={4}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all resize-none"
+                      />
+                    </div>
+
+                    {/* Payment Toggles */}
+                    <div className="pt-4 space-y-4">
+                      <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#0B1120]/50 border border-gray-100 dark:border-white/5">
+                        <div>
+                          <div className="font-bold text-gray-900 dark:text-white">Stripe (Onlayn to'lov)</div>
+                          <div className="text-xs text-gray-500">Kredit/debit karta orqali onlayn to'lash</div>
+                        </div>
+                        <button
+                          onClick={() => setStripeEnabled(!stripeEnabled)}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${stripeEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+                        >
+                          <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${stripeEnabled ? 'right-1' : 'left-1'}`} />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#0B1120]/50 border border-gray-100 dark:border-white/5">
+                        <div>
+                          <div className="font-bold text-gray-900 dark:text-white">Karta orqali (Manual)</div>
+                          <div className="text-xs text-gray-500">O'tkazma qilib chek yuborish orqali to'lash</div>
+                        </div>
+                        <button
+                          onClick={() => setManualEnabled(!manualEnabled)}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${manualEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+                        >
+                          <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${manualEnabled ? 'right-1' : 'left-1'}`} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <Button
+                      onClick={handleUpdateSettings}
+                      loading={updatingSettings}
+                      className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg rounded-2xl"
+                    >
+                      Saqlash
+                    </Button>
+                  </div>
                 </div>
               </div>
 
+              {/* Dangerous Zone */}
               <div className="bg-white dark:bg-[#111827] p-6 rounded-2xl shadow-sm border border-red-100 dark:border-red-500/10">
                 <div className="flex items-center justify-between">
                   <div>
@@ -2378,6 +2661,7 @@ export default function Admin() {
               </div>
             </div>
           )}
+
           {activeTab === 'payments' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
@@ -2457,261 +2741,100 @@ export default function Admin() {
               </div>
             </div>
           )}
-
-          {activeTab === 'notifications' && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Yangi Bildirishnoma Yuborish</h2>
-              </div>
-
-              <div className="bg-white dark:bg-[#111827] p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5">
-                <form onSubmit={handleSendNotification} className="space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Kimga yuboriladi?</label>
-                    <select
-                      value={notificationForm.target}
-                      onChange={(e) => setNotificationForm({ ...notificationForm, target: e.target.value })}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all appearance-none"
-                    >
-                      <option value="all">Barchaga</option>
-                      <option value="newcomers">Yangi kelganlarga (2 kunlik yoki xarid qilmaganlar)</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Xabar turi</label>
-                    <select
-                      value={notificationForm.type}
-                      onChange={(e) => setNotificationForm({ ...notificationForm, type: e.target.value })}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all appearance-none"
-                    >
-                      <option value="info">Ma'lumot</option>
-                      <option value="success">Muvaffaqiyatli / Tabrik</option>
-                      <option value="alert">Ogohlantirish</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Sarlavha</label>
-                    <input
-                      type="text"
-                      required
-                      value={notificationForm.title}
-                      onChange={(e) => setNotificationForm({ ...notificationForm, title: e.target.value })}
-                      placeholder="Xabar sarlavhasi (masalan, Yangilik!)"
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Xabar matni</label>
-                    <textarea
-                      required
-                      value={notificationForm.message}
-                      onChange={(e) => setNotificationForm({ ...notificationForm, message: e.target.value })}
-                      placeholder="To'liq xabar matni..."
-                      rows={5}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all resize-none"
-                    />
-                  </div>
-
-                  <Button
-                    type="submit"
-                    loading={sendingNotification}
-                    className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg rounded-2xl h-auto"
-                    leftIcon={<Bell className="w-5 h-5" />}
-                  >
-                    Bildirishnomani yuborish
-                  </Button>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'newsletters' && (
-            <div className="space-y-6">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Yangiliklar va Obunachilar</h2>
-                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 px-4 py-2 rounded-xl flex items-center gap-2">
-                  <Users className="w-4 h-4 text-emerald-500" />
-                  <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{subscribers.length} ta obunachi</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Compose Form */}
-                <div className="bg-white dark:bg-[#111827] p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 h-fit">
-                  <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-gray-900 dark:text-white">
-                    <Send className="w-5 h-5 text-emerald-500" />
-                    Yangilik yuborish
-                  </h3>
-                  <form onSubmit={handleSendNewsletter} className="space-y-5">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Mavzu</label>
-                      <input
-                        type="text"
-                        required
-                        value={newsletterForm.subject}
-                        onChange={(e) => setNewsletterForm({ ...newsletterForm, subject: e.target.value })}
-                        placeholder="Yangilik mavzusi..."
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Asosiy matn</label>
-                      <textarea
-                        required
-                        value={newsletterForm.body}
-                        onChange={(e) => setNewsletterForm({ ...newsletterForm, body: e.target.value })}
-                        placeholder="Saytga yangi reyslar qo'shildi, buni ko'rib chiqing..."
-                        rows={8}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
-                      />
-                    </div>
-                    <Button
-                      type="submit"
-                      loading={sendingNewsletter}
-                      disabled={subscribers.length === 0}
-                      className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg rounded-2xl h-auto"
-                      leftIcon={<Mail className="w-5 h-5" />}
-                    >
-                      Gmail orqali yuborish
-                    </Button>
-                    <p className="text-[10px] text-center text-gray-400">
-                      * Yuborish tugmasi bosilganda barcha obunachilar bcc qatoriga qo'shilgan holda Gmail ochiladi.
-                    </p>
-                  </form>
-                </div>
-
-                {/* Subscribers List */}
-                <div className="bg-white dark:bg-[#111827] p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5">
-                  <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-gray-900 dark:text-white">
-                    <Users className="w-5 h-5 text-emerald-500" />
-                    Obunachilar
-                  </h3>
-                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 scrollbar-hide">
-                    {subscribers.length > 0 ? (
-                      subscribers.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map((sub, idx) => (
-                        <div key={sub.id || idx} className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#0B1120]/50 border border-gray-100 dark:border-white/5 hover:border-emerald-500/30 transition-all group">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs font-bold font-mono">
-                              {idx + 1}
-                            </div>
-                            <div>
-                              <div className="text-sm font-bold text-gray-900 dark:text-white">{sub.email}</div>
-                              <div className="text-[10px] text-gray-400">Obuna bo'lgan: {new Date(sub.createdAt).toLocaleDateString()}</div>
-                            </div>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setDeleteConfirm({ isOpen: true, collectionName: 'subscribers', id: sub.id })}
-                            className="p-1.5 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all h-auto border-0"
-                            leftIcon={<Trash2 className="w-4 h-4" />}
-                          />
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-center py-12">
-                        <Users className="w-12 h-12 text-gray-300 dark:text-gray-700 mx-auto mb-4 opacity-20" />
-                        <p className="text-gray-500 text-sm">Hozircha obunachilar yo'q.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </main>
 
       {/* Bookings Modal */}
-      {selectedRideForBookings && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-[#111827] w-full max-w-2xl rounded-2xl shadow-2xl border border-gray-100 dark:border-white/5 overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
-              <div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Yo'lovchilar ro'yxati</h3>
-                <p className="text-sm text-gray-500">{selectedRideForBookings.from} → {selectedRideForBookings.to} ({selectedRideForBookings.departureTime})</p>
+      {
+        selectedRideForBookings && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-[#111827] w-full max-w-2xl rounded-2xl shadow-2xl border border-gray-100 dark:border-white/5 overflow-hidden flex flex-col max-h-[90vh]">
+              <div className="p-6 border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Yo'lovchilar ro'yxati</h3>
+                  <p className="text-sm text-gray-500">{selectedRideForBookings.from} → {selectedRideForBookings.to} ({selectedRideForBookings.departureTime})</p>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setSelectedRideForBookings(null)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-full transition-colors"
+                  leftIcon={<X className="w-6 h-6 text-gray-500" />}
+                />
               </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setSelectedRideForBookings(null)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-full transition-colors"
-                leftIcon={<X className="w-6 h-6 text-gray-500" />}
-              />
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="space-y-4">
-                {bookings.filter(b => b.rideId === selectedRideForBookings.id).length > 0 ? (
-                  bookings.filter(b => b.rideId === selectedRideForBookings.id).map((booking, idx) => {
-                    const passenger = usersList.find(u => u.id === booking.userId);
-                    return (
-                      <div key={booking.id || idx} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-white/5 rounded-xl border border-gray-100 dark:border-white/5">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center font-bold">
-                            {passenger?.name?.[0].toUpperCase() || 'U'}
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="space-y-4">
+                  {bookings.filter(b => b.rideId === selectedRideForBookings.id).length > 0 ? (
+                    bookings.filter(b => b.rideId === selectedRideForBookings.id).map((booking, idx) => {
+                      const passenger = usersList.find(u => u.id === booking.userId);
+                      return (
+                        <div key={booking.id || idx} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-white/5 rounded-xl border border-gray-100 dark:border-white/5">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center font-bold">
+                              {passenger?.name?.[0].toUpperCase() || 'U'}
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-gray-900 dark:text-white">{passenger?.name || 'Noma\'lum foydalanuvchi'}</h4>
+                              <p className="text-xs text-gray-500">{passenger?.email || 'Email mavjud emas'}</p>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="font-bold text-gray-900 dark:text-white">{passenger?.name || 'Noma\'lum foydalanuvchi'}</h4>
-                            <p className="text-xs text-gray-500">{passenger?.email || 'Email mavjud emas'}</p>
+                          <div className="text-right">
+                            <div className="text-sm font-bold text-emerald-500">{booking.seatNumber}-o'rindiq</div>
+                            <div className="text-[10px] text-gray-400 uppercase font-bold">{booking.status}</div>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className="text-sm font-bold text-emerald-500">{booking.seatNumber}-o'rindiq</div>
-                          <div className="text-[10px] text-gray-400 uppercase font-bold">{booking.status}</div>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center py-12 text-gray-500">
-                    Bu qatnov uchun hali chiptalar sotilmagan.
-                  </div>
-                )}
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">
+                      Bu qatnov uchun hali chiptalar sotilmagan.
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="p-6 border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-white/5 flex justify-between items-center">
-              <div className="text-sm text-gray-500">
-                Jami: <span className="font-bold text-gray-900 dark:text-white">{bookings.filter(b => b.rideId === selectedRideForBookings.id).length} ta yo'lovchi</span>
+              <div className="p-6 border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-white/5 flex justify-between items-center">
+                <div className="text-sm text-gray-500">
+                  Jami: <span className="font-bold text-gray-900 dark:text-white">{bookings.filter(b => b.rideId === selectedRideForBookings.id).length} ta yo'lovchi</span>
+                </div>
+                <Button
+                  onClick={() => setSelectedRideForBookings(null)}
+                  className="px-6 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl font-bold text-sm"
+                >
+                  Yopish
+                </Button>
               </div>
-              <Button
-                onClick={() => setSelectedRideForBookings(null)}
-                className="px-6 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl font-bold text-sm"
-              >
-                Yopish
-              </Button>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Delete Confirmation Modal */}
-      {deleteConfirm.isOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-[#111827] rounded-2xl p-6 max-w-sm w-full shadow-xl border border-gray-200 dark:border-white/10">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">O'chirishni tasdiqlaysizmi?</h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">Bu amalni ortga qaytarib bo'lmaydi.</p>
-            <div className="flex gap-3 justify-end">
-              <Button
-                variant="secondary"
-                onClick={() => setDeleteConfirm({ isOpen: false, collectionName: '', id: '' })}
-                className="px-4 py-2 text-gray-600 dark:text-gray-400 font-medium hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors"
-              >
-                Bekor qilish
-              </Button>
-              <Button
-                onClick={confirmDelete}
-                loading={formLoading}
-                className="px-4 py-2 bg-red-600 text-white font-medium hover:bg-red-700 rounded-xl transition-colors h-auto"
-              >
-                O'chirish
-              </Button>
+      {
+        deleteConfirm.isOpen && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-white dark:bg-[#111827] rounded-2xl p-6 max-w-sm w-full shadow-xl border border-gray-200 dark:border-white/10">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">O'chirishni tasdiqlaysizmi?</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">Bu amalni ortga qaytarib bo'lmaydi.</p>
+              <div className="flex gap-3 justify-end">
+                <Button
+                  variant="secondary"
+                  onClick={() => setDeleteConfirm({ isOpen: false, collectionName: '', id: '' })}
+                  className="px-4 py-2 text-gray-600 dark:text-gray-400 font-medium hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors"
+                >
+                  Bekor qilish
+                </Button>
+                <Button
+                  onClick={confirmDelete}
+                  loading={formLoading}
+                  className="px-4 py-2 bg-red-600 text-white font-medium hover:bg-red-700 rounded-xl transition-colors h-auto"
+                >
+                  O'chirish
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }

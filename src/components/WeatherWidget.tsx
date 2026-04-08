@@ -32,14 +32,11 @@ export const WeatherWidget: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const url = `/api/weather?latitude=${selectedCity.lat}&longitude=${selectedCity.lon}`;
-        console.log(`[Frontend Debug] Fetching weather from: ${url}`);
-
-        // Use direct fetch for better debugging if needed, or keep apiFetch
-        const data = await apiFetch<WeatherData>(url);
+        const data = await apiFetch<WeatherData>(
+          `https://api.open-meteo.com/v1/forecast?latitude=${selectedCity.lat}&longitude=${selectedCity.lon}&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto`
+        );
         setWeather(data);
-      } catch (err: any) {
-        console.error('[Frontend Debug] Weather fetch error:', err);
+      } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
         setLoading(false);
@@ -91,10 +88,11 @@ export const WeatherWidget: React.FC = () => {
               key={city.name}
               variant="ghost"
               onClick={() => setSelectedCity(city)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all h-auto border-0 whitespace-nowrap ${selectedCity.name === city.name
-                ? 'bg-white dark:bg-[#1F2937] text-emerald-500 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all h-auto border-0 whitespace-nowrap ${
+                selectedCity.name === city.name
+                  ? 'bg-white dark:bg-[#1F2937] text-emerald-500 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
             >
               {city.name}
             </Button>
@@ -110,9 +108,9 @@ export const WeatherWidget: React.FC = () => {
       ) : error ? (
         <div className="text-center py-12">
           <p className="text-red-500 text-sm">{error}</p>
-          <Button
+          <Button 
             variant="ghost"
-            onClick={() => setSelectedCity({ ...selectedCity })}
+            onClick={() => setSelectedCity({...selectedCity})}
             className="mt-4 text-emerald-500 text-sm font-medium hover:underline h-auto border-0"
           >
             Qayta urinish
@@ -126,18 +124,19 @@ export const WeatherWidget: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05 }}
               key={time}
-              className={`p-4 rounded-2xl border transition-all ${index === 0
-                ? 'bg-emerald-500/5 border-emerald-500/20'
-                : 'bg-gray-50 dark:bg-[#0B1120]/50 border-gray-100 dark:border-white/5'
-                }`}
+              className={`p-4 rounded-2xl border transition-all ${
+                index === 0 
+                  ? 'bg-emerald-500/5 border-emerald-500/20' 
+                  : 'bg-gray-50 dark:bg-[#0B1120]/50 border-gray-100 dark:border-white/5'
+              }`}
             >
               <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">
                 {index === 0 ? 'Bugun' : formatDate(time)}
               </div>
-
+              
               <div className="flex flex-col items-center gap-3">
                 {getWeatherIcon(weather.daily.weathercode[index])}
-
+                
                 <div className="text-center">
                   <div className="text-lg font-bold text-gray-900 dark:text-white">
                     {Math.round(weather.daily.temperature_2m_max[index])}°

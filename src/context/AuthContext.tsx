@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  signInWithPopup, 
-  signOut, 
-  onAuthStateChanged, 
-  signInWithEmailAndPassword, 
+import {
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
   signInWithPhoneNumber,
@@ -25,6 +25,8 @@ interface User {
   passport?: string;
   address?: string;
   gender?: string;
+  createdAt: string;
+  lastSeenNotificationAt?: string;
   isProfileComplete?: boolean;
 }
 
@@ -58,7 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (firebaseUser) {
         const userDocRef = doc(db, 'users', firebaseUser.uid);
-        
+
         // Use onSnapshot for real-time updates
         unsubscribeSnapshot = onSnapshot(userDocRef, (doc) => {
           let role = firebaseUser.email === 'qoziboyevaslbek359@gmail.com' ? 'admin' : 'user';
@@ -69,6 +71,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           let passport = '';
           let address = '';
           let gender = '';
+          let createdAt = new Date().toISOString();
+          let lastSeenNotificationAt = '';
           let isProfileComplete = false;
 
           if (doc.exists()) {
@@ -81,16 +85,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             passport = data.passport || '';
             address = data.address || '';
             gender = data.gender || '';
-            
-            const hasAllFields = 
-              name && 
-              email && 
-              phoneNumber && 
-              birthDate && 
-              passport && 
+            createdAt = data.createdAt || createdAt;
+            lastSeenNotificationAt = data.lastSeenNotificationAt || '';
+
+            const hasAllFields =
+              name &&
+              email &&
+              phoneNumber &&
+              birthDate &&
+              passport &&
               address &&
               gender;
-            
+
             isProfileComplete = (data.isProfileComplete || false) && !!hasAllFields;
           } else {
             // Initial profile creation if doc doesn't exist
@@ -115,6 +121,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             passport,
             address,
             gender,
+            createdAt,
+            lastSeenNotificationAt,
             isProfileComplete
           });
           setLoading(false);
@@ -126,7 +134,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             name: firebaseUser.displayName || 'User',
             email: firebaseUser.email || '',
             picture: firebaseUser.photoURL || undefined,
-            role: firebaseUser.email === 'qoziboyevaslbek359@gmail.com' ? 'admin' : 'user'
+            role: firebaseUser.email === 'qoziboyevaslbek359@gmail.com' ? 'admin' : 'user',
+            createdAt: new Date().toISOString(),
+            lastSeenNotificationAt: new Date().toISOString()
           });
           setLoading(false);
         });
@@ -166,7 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       const firebaseUser = userCredential.user;
-      
+
       // Perform profile update and Firestore write in parallel for speed
       await Promise.all([
         updateProfile(firebaseUser, { displayName: name }),
@@ -175,7 +185,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email,
           role: 'user',
           isProfileComplete: false,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          lastSeenNotificationAt: new Date().toISOString()
         })
       ]);
 
@@ -185,7 +196,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         name,
         email,
         picture: firebaseUser.photoURL || undefined,
-        role: 'user'
+        role: 'user',
+        createdAt: new Date().toISOString(),
+        lastSeenNotificationAt: new Date().toISOString()
       });
     } catch (error) {
       console.error("Registration failed:", error);
@@ -202,7 +215,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         recaptchaContainer.style.display = 'none';
         document.body.appendChild(recaptchaContainer);
       }
-      
+
       const recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
         size: 'invisible'
       });
@@ -226,16 +239,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      loading, 
-      settings, 
-      loginWithGoogle, 
-      loginWithEmail, 
-      registerWithEmail, 
+    <AuthContext.Provider value={{
+      user,
+      loading,
+      settings,
+      loginWithGoogle,
+      loginWithEmail,
+      registerWithEmail,
       loginWithPhone,
-      logout, 
-      updateSettings 
+      logout,
+      updateSettings
     }}>
       {children}
     </AuthContext.Provider>

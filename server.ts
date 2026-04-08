@@ -41,7 +41,7 @@ let firebaseApp: admin.app.App;
 try {
   // Prioritize projectId from config file as it's what the client uses
   const projectId = firebaseConfig.projectId || process.env.FIREBASE_PROJECT_ID;
-
+  
   if (!admin.apps.length) {
     if (projectId) {
       firebaseApp = admin.initializeApp({
@@ -75,7 +75,7 @@ try {
   if (firebaseApp) {
     // If we have a named database ID, use it. Otherwise use default.
     const databaseId = firebaseConfig.firestoreDatabaseId || process.env.FIRESTORE_DATABASE_ID;
-
+    
     if (databaseId) {
       db = getAdminFirestore(firebaseApp, databaseId);
       console.log("Using named Firestore database (Admin):", databaseId);
@@ -197,7 +197,7 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
 
     // Check email FIRST - this is the most reliable check and doesn't require Firestore
     const isEmailAdmin = decodedToken.email === 'qoziboyevaslbek359@gmail.com' ||
-      decodedToken.email === 'admin@tezchipta.uz';
+                         decodedToken.email === 'admin@tezchipta.uz';
 
     if (isEmailAdmin) {
       console.log("Admin verified by email:", decodedToken.email);
@@ -279,19 +279,7 @@ async function startServer() {
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
   app.use(cookieParser());
 
-  // Debug logger
-  app.use((req, res, next) => {
-    if (req.url.startsWith('/api/')) {
-      console.log(`[Backend Debug] ${req.method} ${req.url}`);
-    }
-    next();
-  });
-
   // API Routes
-  app.get("/api/weather-test", (req, res) => {
-    res.json({ status: "ok", message: "Weather API endpoint is reachable" });
-  });
-
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
   });
@@ -385,7 +373,7 @@ async function startServer() {
 
       // 1. Create User in Firebase Auth using REST API (to avoid credential issues)
       console.log("Attempting to create user in Firebase Auth via REST API...");
-
+      
       if (!firebaseConfig.apiKey) {
         throw new Error("Firebase API Key not found in config. Cannot create user.");
       }
@@ -400,10 +388,10 @@ async function startServer() {
             returnSecureToken: true
           }
         );
-
+        
         uid = signUpResponse.data.localId;
         const idToken = signUpResponse.data.idToken;
-
+        
         // Update profile (displayName, photoUrl)
         await axios.post(
           `https://identitytoolkit.googleapis.com/v1/accounts:update?key=${firebaseConfig.apiKey}`,
@@ -483,11 +471,11 @@ async function startServer() {
 
       // Create JWT for session
       const token = jwt.sign(
-        {
-          id: payload.sub,
-          email: payload.email,
-          name: payload.name,
-          picture: payload.picture
+        { 
+          id: payload.sub, 
+          email: payload.email, 
+          name: payload.name, 
+          picture: payload.picture 
         },
         JWT_SECRET,
         { expiresIn: "7d" }
@@ -501,14 +489,12 @@ async function startServer() {
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
 
-      res.json({
-        success: true, user: {
-          id: payload.sub,
-          email: payload.email,
-          name: payload.name,
-          picture: payload.picture
-        }
-      });
+      res.json({ success: true, user: { 
+        id: payload.sub, 
+        email: payload.email, 
+        name: payload.name, 
+        picture: payload.picture 
+      }});
     } catch (error: any) {
       console.error("Token verification error:", error.message);
       res.status(401).json({ error: "Authentication failed" });
@@ -658,28 +644,6 @@ async function startServer() {
     }
   });
 
-  // Weather Proxy API
-  app.get("/api/weather", async (req, res) => {
-    const { latitude, longitude } = req.query;
-
-    if (!latitude || !longitude) {
-      return res.status(400).json({ error: "Latitude and longitude are required" });
-    }
-
-    try {
-      const response = await axios.get(
-        `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto`
-      );
-      res.json(response.data);
-    } catch (error: any) {
-      console.error("Weather API error:", error.response?.data || error.message);
-      res.status(error.response?.status || 500).json({
-        error: "Ob-havo ma'lumotlarini olishda xatolik yuz berdi",
-        details: error.response?.data || error.message
-      });
-    }
-  });
-
   // Generate Ticket PDF
   app.post("/api/generate-ticket", verifyUser, async (req, res) => {
     const { bookingId } = req.body;
@@ -698,12 +662,12 @@ async function startServer() {
       }
 
       const booking = bookingDoc.data()!;
-
+      
       // Authorization check: User can only download their own ticket, or admin can download any
       const userDocRef = clientDoc(clientDb, 'users', userId);
       const userDoc = await getClientDoc(userDocRef);
       const isAdmin = userDoc.exists() && userDoc.data()?.role === 'admin';
-
+      
       if (booking.userId !== userId && !isAdmin) {
         return res.status(403).json({ error: "Ruxsat berilmagan" });
       }
@@ -829,7 +793,7 @@ async function startServer() {
       // Status Badge
       const isConfirmed = booking.status === 'confirmed';
       const statusColor = isConfirmed ? rgb(0.06, 0.45, 0.35) : rgb(0.8, 0.1, 0.1);
-
+      
       page.drawRectangle({
         x: width - 150,
         y: 30,
@@ -865,7 +829,7 @@ async function startServer() {
       });
 
       const pdfBytes = await pdfDoc.save();
-
+      
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename=ticket-${ticketId}.pdf`);
       res.send(Buffer.from(pdfBytes));
@@ -880,15 +844,15 @@ async function startServer() {
   app.post("/api/admin/clear-database", verifyAdmin, async (req, res) => {
     try {
       const collections = ['bookings', 'rides', 'users', 'drivers', 'faqs', 'messages', 'chats', 'reviews', 'blogs'];
-
+      
       for (const collectionName of collections) {
         const collectionRef = clientCollection(clientDb, collectionName);
         const snapshot = await getClientDocs(collectionRef);
-
+        
         for (const document of snapshot.docs) {
           // Don't delete the admin user
           if (collectionName === 'users' && (document.data().email === 'qoziboyevaslbek359@gmail.com' || document.data().role === 'admin')) continue;
-
+          
           // If it's a chat, delete its messages subcollection first
           if (collectionName === 'chats') {
             const messagesCollectionRef = clientCollection(clientDb, 'chats', document.id, 'messages');
@@ -898,7 +862,7 @@ async function startServer() {
               await deleteClientDoc(msgDoc.ref);
             }
           }
-
+          
           await deleteClientDoc(document.ref);
         }
       }
@@ -920,7 +884,7 @@ async function startServer() {
     socket.on("join_bus", (bus_id) => {
       console.log(`Socket ${socket.id} joining bus_${bus_id}`);
       socket.join(`bus_${bus_id}`);
-
+      
       // Send initial location if available
       if (busLocations[bus_id]) {
         socket.emit("location_update", busLocations[bus_id]);
@@ -947,7 +911,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     const publicPath = path.join(process.cwd(), 'public');
-
+    
     console.log("Serving static files from:", distPath);
     console.log("Serving public files from:", publicPath);
 
@@ -955,7 +919,7 @@ async function startServer() {
     app.use(express.static(publicPath));
     // Then serve built files
     app.use(express.static(distPath));
-
+    
     // Explicit route for manifest to ensure correct MIME type
     app.get(['/manifest.webmanifest', '/manifest.json'], (req, res) => {
       const manifestPath = path.join(distPath, 'manifest.webmanifest');
@@ -971,7 +935,7 @@ async function startServer() {
     app.get('/logo.png', (req, res) => {
       const logoInPublic = path.join(publicPath, 'logo.png');
       const logoInDist = path.join(distPath, 'logo.png');
-
+      
       res.setHeader('Content-Type', 'image/png');
       if (fs.existsSync(logoInPublic)) {
         res.sendFile(logoInPublic);

@@ -2,8 +2,9 @@ import { useSettings } from '../context/SettingsContext';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
-import { collection, query, where, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../firebase';
+import { collection, query, where, getDocs, doc, getDoc, updateDoc, addDoc } from 'firebase/firestore';
+import { db, auth, handleFirestoreError, OperationType, withRetry } from '../firebase';
+import { isValidEmail } from '../utils/validation';
 import { useNavigate, Link } from 'react-router-dom';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { Button } from '../components/ui/Button';
@@ -31,6 +32,7 @@ export default function Profile() {
   const [driverRides, setDriverRides] = useState<any[]>([]);
   const [sharingLocationId, setSharingLocationId] = useState<string | null>(null);
   const watchIdRef = React.useRef<number | null>(null);
+  const [activeTab, setActiveTab] = useState<'bookings' | 'newsletter'>('bookings');
 
   const handleDownloadTicket = async (bookingId: string) => {
     setDownloadingId(bookingId);
@@ -38,7 +40,7 @@ export default function Profile() {
       const idToken = await auth.currentUser?.getIdToken();
       const response = await fetch('/api/generate-ticket', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         },
@@ -108,7 +110,7 @@ export default function Profile() {
           collection(db, 'bookings'),
           where('userId', '==', user.id)
         );
-        
+
         let bookingsSnapshot;
         try {
           bookingsSnapshot = await getDocs(bookingsQuery);
@@ -156,6 +158,35 @@ export default function Profile() {
       fetchDriverRides();
     }
   }, [user, authLoading, navigate]);
+
+  // Newsletter auto-subscription
+  useEffect(() => {
+    if (authLoading || !user || !user.email) return;
+
+    const autoSubscribe = async () => {
+      try {
+        const emailLower = user.email.toLowerCase();
+        const subscribersRef = collection(db, 'newsletter_subscribers');
+        const existingQuery = query(subscribersRef, where('emailLower', '==', emailLower));
+        const existingSnapshot = await withRetry(() => getDocs(existingQuery));
+
+        if (existingSnapshot.empty) {
+          await withRetry(() => addDoc(subscribersRef, {
+            email: user.email,
+            emailLower,
+            createdAt: new Date().toISOString(),
+            source: 'profile_entry',
+            userId: user.id
+          }));
+          console.log("Automatically subscribed to newsletter from profile entry.");
+        }
+      } catch (error) {
+        console.error("Auto-subscription failed:", error);
+      }
+    };
+
+    autoSubscribe();
+  }, [user, authLoading]);
 
   const toggleLocationSharing = (rideId: string) => {
     if (sharingLocationId === rideId) {
@@ -272,7 +303,7 @@ export default function Profile() {
               <div className="w-20 h-20 sm:w-24 sm:h-24 bg-emerald-500 rounded-full flex items-center justify-center text-white text-2xl sm:text-3xl font-bold mx-auto mb-4 sm:mb-6 shadow-lg shadow-emerald-500/20">
                 {user?.name[0].toUpperCase()}
               </div>
-              
+
               {isEditingName ? (
                 <div className="flex flex-col gap-3 mb-4">
                   <input
@@ -330,9 +361,9 @@ export default function Profile() {
                   </span>
                 </div>
               )}
-              
+
               <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm mb-4 sm:mb-6">{user?.email || user?.phoneNumber}</p>
-              
+
               <div className="space-y-2 sm:space-y-3 text-left">
                 <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 bg-gray-50 dark:bg-[#0B1120] rounded-xl border border-gray-100 dark:border-white/5">
                   <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
@@ -420,140 +451,179 @@ export default function Profile() {
               </div>
             )}
 
-            <div>
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
-                <SafeImage src={logoUrl} alt="Tez Chipta" className="w-6 h-6 object-contain" />
-                Mening chiptalarim
-              </h3>
-
-            {bookings.length === 0 ? (
-              <div className="bg-white dark:bg-[#111827] rounded-2xl p-12 text-center border border-gray-200 dark:border-white/5 shadow-sm">
-                <div className="w-16 h-16 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Bus className="w-8 h-8 text-gray-400" />
-                </div>
-                <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Hali chiptalar yo'q</h4>
-                <p className="text-gray-600 dark:text-gray-400 mb-6">Siz hali birorta ham reysga chipta xarid qilmagansiz.</p>
-                <Button 
-                  onClick={() => navigate('/')} 
-                  className="px-6 py-2.5 bg-emerald-500 text-white rounded-xl font-medium hover:bg-emerald-600 transition-colors h-auto"
+            <div className="flex flex-col gap-6">
+              {/* Tabs */}
+              <div className="flex p-1 bg-white dark:bg-[#111827] rounded-2xl border border-gray-200 dark:border-white/5 shadow-sm">
+                <Button
+                  variant="ghost"
+                  onClick={() => setActiveTab('bookings')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all h-auto border-0 ${activeTab === 'bookings' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/25' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'}`}
                 >
-                  Reyslarni qidirish
+                  <Bus className="w-5 h-5" />
+                  <span className="font-bold">{t('profile.tabs.tickets')}</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => setActiveTab('newsletter')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all h-auto border-0 ${activeTab === 'newsletter' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/25' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'}`}
+                >
+                  <Mail className="w-5 h-5" />
+                  <span className="font-bold">{t('profile.tabs.newsletter')}</span>
                 </Button>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {bookings.map((booking) => (
-                  <div key={booking.id} className="bg-white dark:bg-[#111827] rounded-2xl p-6 shadow-sm border border-gray-200 dark:border-white/5 hover:border-emerald-500/30 transition-all">
-                    <div className="flex flex-col sm:flex-row justify-between gap-4">
-                      <div className="space-y-4 flex-1">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className={`flex items-center gap-1.5 px-3 py-1 text-[10px] sm:text-xs font-bold rounded-full uppercase tracking-wider ${
-                              booking.status === 'confirmed' 
-                                ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-500' 
-                                : booking.paymentStatus === 'pending_review'
-                                ? 'bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500'
-                                : booking.status === 'cancelled'
-                                ? 'bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-500'
-                                : 'bg-gray-100 dark:bg-white/5 text-gray-500'
-                            }`}>
-                              {booking.status === 'confirmed' ? (
-                                <>
-                                  <ShieldCheck className="w-3.5 h-3.5" />{t('profile.ticket.status.confirmed')}</>
-                              ) : booking.paymentStatus === 'pending_review' ? (
-                                <>
-                                  <Clock className="w-3.5 h-3.5" />
-                                  To'lov tekshirilmoqda
-                                </>
-                              ) : booking.status === 'cancelled' ? (
-                                <>
-                                  <X className="w-3.5 h-3.5" />{t('profile.ticket.status.cancelled')}</>
-                              ) : (
-                                <>
-                                  <Clock className="w-3.5 h-3.5" />{t('profile.ticket.status.pending')}</>
-                              )}
-                            </span>
-                            <span className="text-[10px] sm:text-xs text-gray-400 font-mono">ID: {booking.id.slice(0, 8)}</span>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-3 sm:gap-6">
-                          <div className="text-left">
-                            <div className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white">{booking.ride?.departureTime}</div>
-                            <div className="text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-widest">{booking.ride?.from}</div>
-                          </div>
-                          <div className="flex-1 flex items-center justify-center px-2 sm:px-4 relative">
-                            <div className="w-full border-t-2 border-dashed border-gray-200 dark:border-gray-700"></div>
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <div className="bg-white dark:bg-[#111827] px-2">
-                                <Bus className="w-4 h-4 text-emerald-500" />
+
+              {activeTab === 'bookings' ? (
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2 ml-2">
+                    <SafeImage src={logoUrl} alt="Tez Chipta" className="w-6 h-6 object-contain" />
+                    {t('profile.tabs.tickets')}
+                  </h3>
+
+                  {bookings.length === 0 ? (
+                    <div className="bg-white dark:bg-[#111827] rounded-2xl p-12 text-center border border-gray-200 dark:border-white/5 shadow-sm">
+                      <div className="w-16 h-16 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Bus className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Hali chiptalar yo'q</h4>
+                      <p className="text-gray-600 dark:text-gray-400 mb-6">Siz hali birorta ham reysga chipta xarid qilmagansiz.</p>
+                      <Button
+                        onClick={() => navigate('/')}
+                        className="px-6 py-2.5 bg-emerald-500 text-white rounded-xl font-medium hover:bg-emerald-600 transition-colors h-auto"
+                      >
+                        Reyslarni qidirish
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {bookings.map((booking) => (
+                        <div key={booking.id} className="bg-white dark:bg-[#111827] rounded-2xl p-6 shadow-sm border border-gray-200 dark:border-white/5 hover:border-emerald-500/30 transition-all">
+                          <div className="flex flex-col sm:flex-row justify-between gap-4">
+                            <div className="space-y-4 flex-1">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className={`flex items-center gap-1.5 px-3 py-1 text-[10px] sm:text-xs font-bold rounded-full uppercase tracking-wider ${booking.status === 'confirmed'
+                                    ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-500'
+                                    : booking.paymentStatus === 'pending_review'
+                                      ? 'bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500'
+                                      : booking.status === 'cancelled'
+                                        ? 'bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-500'
+                                        : 'bg-gray-100 dark:bg-white/5 text-gray-500'
+                                    }`}>
+                                    {booking.status === 'confirmed' ? (
+                                      <>
+                                        <ShieldCheck className="w-3.5 h-3.5" />{t('profile.ticket.status.confirmed')}</>
+                                    ) : booking.paymentStatus === 'pending_review' ? (
+                                      <>
+                                        <Clock className="w-3.5 h-3.5" />
+                                        To'lov tekshirilmoqda
+                                      </>
+                                    ) : booking.status === 'cancelled' ? (
+                                      <>
+                                        <X className="w-3.5 h-3.5" />{t('profile.ticket.status.cancelled')}</>
+                                    ) : (
+                                      <>
+                                        <Clock className="w-3.5 h-3.5" />{t('profile.ticket.status.pending')}</>
+                                    )}
+                                  </span>
+                                  <span className="text-[10px] sm:text-xs text-gray-400 font-mono">ID: {booking.id.slice(0, 8)}</span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-3 sm:gap-6">
+                                <div className="text-left">
+                                  <div className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white">{booking.ride?.departureTime}</div>
+                                  <div className="text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-widest">{booking.ride?.from}</div>
+                                </div>
+                                <div className="flex-1 flex items-center justify-center px-2 sm:px-4 relative">
+                                  <div className="w-full border-t-2 border-dashed border-gray-200 dark:border-gray-700"></div>
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <div className="bg-white dark:bg-[#111827] px-2">
+                                      <Bus className="w-4 h-4 text-emerald-500" />
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white">{booking.ride?.arrivalTime}</div>
+                                  <div className="text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-widest">{booking.ride?.to}</div>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4 pt-3 sm:pt-4 border-t border-gray-50 dark:border-white/5">
+                                <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-sm text-gray-600 dark:text-gray-400">
+                                  <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500" />
+                                  <span>{booking.ride?.date === 'today' ? 'Bugun' : booking.ride?.date === 'tomorrow' ? 'Ertaga' : booking.ride?.date}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-sm text-gray-600 dark:text-gray-400">
+                                  <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500" />
+                                  <span>{booking.seatNumber}-o'rindiq</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                                  <Clock className="w-4 h-4 text-emerald-500" />
+                                  <span>{t('profile.ticket.date')}: {booking.createdAt.split('T')[0]}</span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white">{booking.ride?.arrivalTime}</div>
-                            <div className="text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-widest">{booking.ride?.to}</div>
-                          </div>
-                        </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4 pt-3 sm:pt-4 border-t border-gray-50 dark:border-white/5">
-                          <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-sm text-gray-600 dark:text-gray-400">
-                            <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500" />
-                            <span>{booking.ride?.date === 'today' ? 'Bugun' : booking.ride?.date === 'tomorrow' ? 'Ertaga' : booking.ride?.date}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-sm text-gray-600 dark:text-gray-400">
-                            <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500" />
-                            <span>{booking.seatNumber}-o'rindiq</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                            <Clock className="w-4 h-4 text-emerald-500" />
-                            <span>{t('profile.ticket.date')}: {booking.createdAt.split('T')[0]}</span>
+                            <div className="sm:text-right flex flex-row sm:flex-col justify-between sm:justify-center items-center sm:items-end gap-2 border-t sm:border-t-0 sm:border-l border-gray-100 dark:border-white/5 pt-4 sm:pt-0 sm:pl-6">
+                              <div className="text-sm text-gray-500 dark:text-gray-400">To'langan:</div>
+                              <div className="text-xl font-bold text-emerald-500 mb-2">{formatPrice(booking.price)}</div>
+                              {booking.status === 'confirmed' && (
+                                <div className="flex flex-col gap-2 w-full sm:w-auto">
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => handleDownloadTicket(booking.id)}
+                                    loading={downloadingId === booking.id}
+                                    className="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border-0"
+                                    leftIcon={<Download className="w-4 h-4" />}
+                                  >
+                                    Chipta
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => setTrackingRideId(booking.rideId)}
+                                    className="bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-500/20 border-0"
+                                    leftIcon={<Map className="w-4 h-4" />}
+                                  >
+                                    {t('profile.track_bus')}
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      
-                      <div className="sm:text-right flex flex-row sm:flex-col justify-between sm:justify-center items-center sm:items-end gap-2 border-t sm:border-t-0 sm:border-l border-gray-100 dark:border-white/5 pt-4 sm:pt-0 sm:pl-6">
-                        <div className="text-sm text-gray-500 dark:text-gray-400">To'langan:</div>
-                        <div className="text-xl font-bold text-emerald-500 mb-2">{formatPrice(booking.price)}</div>
-                        {booking.status === 'confirmed' && (
-                          <div className="flex flex-col gap-2 w-full sm:w-auto">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => handleDownloadTicket(booking.id)}
-                              loading={downloadingId === booking.id}
-                              className="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border-0"
-                              leftIcon={<Download className="w-4 h-4" />}
-                            >
-                              Chipta
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => setTrackingRideId(booking.rideId)}
-                              className="bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-500/20 border-0"
-                              leftIcon={<Map className="w-4 h-4" />}
-                            >
-                              {t('profile.track_bus')}
-                            </Button>
-                          </div>
-                        )}
-                      </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-white dark:bg-[#111827] rounded-2xl p-8 sm:p-12 text-center border border-gray-200 dark:border-white/5 shadow-sm space-y-6">
+                  <div className="w-20 h-20 bg-emerald-50 dark:bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto">
+                    <Mail className="w-10 h-10 text-emerald-500" />
+                  </div>
+                  <div className="max-w-md mx-auto">
+                    <h4 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Newsletter</h4>
+                    <p className="text-gray-600 dark:text-gray-400 mb-8">
+                      {t('home.footer.newsletter_desc') || "Siz bizning yangiliklar byulletenimizga muvaffaqiyatli obuna bo'lgansiz. Endi siz barcha yangiliklar va maxsus takliflardan xabardor bo'lib turasiz."}
+                    </p>
+                    <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl inline-flex items-center gap-3">
+                      <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                      <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">Holat: Faol obunachi</span>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
-    </main>
+      </main>
 
       <AnimatePresence>
         {trackingRideId && (
-          <BusTracker 
-            rideId={trackingRideId} 
-            onClose={() => setTrackingRideId(null)} 
+          <BusTracker
+            rideId={trackingRideId}
+            onClose={() => setTrackingRideId(null)}
           />
         )}
       </AnimatePresence>

@@ -7,25 +7,25 @@ import { useLanguage } from '../context/LanguageContext';
 import { collection, getDocs, addDoc, query, where, doc, updateDoc } from 'firebase/firestore';
 import { SafeImage } from '../components/SafeImage';
 import { db, auth, handleFirestoreError, OperationType, withRetry } from '../firebase';
-import { isValidContact } from '../utils/validation';
+import { isValidContact, isValidEmail } from '../utils/validation';
 import { useTheme } from '../context/ThemeContext';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { WeatherWidget } from '../components/WeatherWidget';
 import { Button } from '../components/ui/Button';
 import { toast } from 'sonner';
-import {
-  Bus,
-  MapPin,
-  Clock,
-  Star,
-  Phone,
-  MessageCircle,
-  CreditCard,
-  ShieldCheck,
-  Zap,
-  Camera,
-  ChevronDown,
+import { 
+  Bus, 
+  MapPin, 
+  Clock, 
+  Star, 
+  Phone, 
+  MessageCircle, 
+  CreditCard, 
+  ShieldCheck, 
+  Zap, 
+  Camera, 
+  ChevronDown, 
   ChevronUp,
   Armchair,
   User,
@@ -56,14 +56,14 @@ export default function Home() {
   const [searchTo, setSearchTo] = useState('');
   const [logoClickCount, setLogoClickCount] = useState(0);
   const [lastClickTime, setLastClickTime] = useState(0);
-
+  
   // Modals state
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
   const [selectedRideForSeat, setSelectedRideForSeat] = useState<string | null>(null);
   const [showPayment, setShowPayment] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
-  const [pendingBooking, setPendingBooking] = useState<{ ride: any, seat: number } | null>(null);
+  const [pendingBooking, setPendingBooking] = useState<{ride: any, seat: number} | null>(null);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [paymentMethodLoading, setPaymentMethodLoading] = useState<'stripe' | 'manual' | null>(null);
   const [showPaymentSelection, setShowPaymentSelection] = useState(false);
@@ -155,7 +155,7 @@ export default function Home() {
         const reviewsData = reviewsSnapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() }))
           .filter((r: any) => r.isFeatured === true);
-
+        
         // Calculate real stats
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -164,10 +164,10 @@ export default function Home() {
         const bookingsCol = collection(db, 'bookings');
         const todayBookingsQuery = query(bookingsCol, where('createdAt', '>=', todayStr));
         const todayBookingsSnapshot = await getDocs(todayBookingsQuery);
-
+        
         const allApprovedReviews = reviewsSnapshot.docs.map(doc => doc.data() as any);
-        const avgRating = allApprovedReviews.length > 0
-          ? allApprovedReviews.reduce((acc, r) => acc + (r.rating || 0), 0) / allApprovedReviews.length
+        const avgRating = allApprovedReviews.length > 0 
+          ? allApprovedReviews.reduce((acc, r) => acc + (r.rating || 0), 0) / allApprovedReviews.length 
           : 4.8;
         const satisfactionRate = Math.round((avgRating / 5) * 100);
 
@@ -246,11 +246,6 @@ export default function Home() {
     const matchesTo = !searchTo || ride.to === searchTo;
     return matchesDate && matchesFrom && matchesTo;
   });
-
-  const ridesCountByDate = ((['today', 'tomorrow', 'weekly'] as const)).reduce((acc, date) => {
-    acc[date] = rides.filter(r => r.date === date).length;
-    return acc;
-  }, {} as Record<'today' | 'tomorrow' | 'weekly', number>);
   const selectedDriver = drivers.find(d => d.id === selectedDriverId);
   const selectedRide = rides.find(r => r.id === selectedRideForSeat);
 
@@ -269,7 +264,7 @@ export default function Home() {
     }
 
     if (!selectedSeat || !selectedRide) return;
-
+    
     setPendingBooking({ ride: selectedRide, seat: selectedSeat });
     setSelectedRideForSeat(null);
     setShowPaymentSelection(true);
@@ -294,7 +289,7 @@ export default function Home() {
       };
 
       const bookingDoc = await addDoc(collection(db, 'bookings'), bookingData);
-
+      
       const idToken = await auth.currentUser?.getIdToken();
       const response = await fetch('/api/create-checkout-session', {
         method: 'POST',
@@ -468,18 +463,39 @@ export default function Home() {
 
   const handleNewsletter = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newsletterEmail) return;
+    const normalizedEmail = newsletterEmail.trim();
+    if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
+      toast.error("Iltimos, to'g'ri email kiriting.");
+      return;
+    }
 
     setNewsletterLoading(true);
     try {
-      await addDoc(collection(db, 'subscribers'), {
-        email: newsletterEmail,
-        createdAt: new Date().toISOString()
-      });
+      const emailLower = normalizedEmail.toLowerCase();
+      const subscribersRef = collection(db, 'newsletter_subscribers');
+      const existingQuery = query(subscribersRef, where('emailLower', '==', emailLower));
+      const existingSnapshot = await withRetry(() => getDocs(existingQuery));
+      if (!existingSnapshot.empty) {
+        toast.success("Siz allaqachon obuna bo'lgansiz.");
+        return;
+      }
+
+      const payload: any = {
+        email: normalizedEmail,
+        emailLower,
+        createdAt: new Date().toISOString(),
+        source: 'footer'
+      };
+      if (user?.id) {
+        payload.userId = user.id;
+      }
+
+      await withRetry(() => addDoc(subscribersRef, payload));
       setNewsletterEmail('');
-      toast.success(t('home.newsletter.success') || "Yangiliklarga obuna bo'ldingiz!");
+      toast.success("Obuna muvaffaqiyatli yakunlandi!");
     } catch (error) {
-      console.error("Newsletter subscription failed:", error);
+      console.error("Newsletter subscribe failed:", error);
+      handleFirestoreError(error, OperationType.CREATE, 'newsletter_subscribers');
       toast.error("Obuna bo'lishda xatolik yuz berdi.");
     } finally {
       setNewsletterLoading(false);
@@ -495,16 +511,16 @@ export default function Home() {
           <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_0%_0%,_rgba(16,185,129,0.15)_0%,_transparent_50%)]" />
           <div className="absolute bottom-0 right-0 w-full h-full bg-[radial-gradient(circle_at_100%_100%,_rgba(16,185,129,0.1)_0%,_transparent_50%)]" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(circle_at_50%_50%,_rgba(11,17,32,0)_0%,_#0B1120_100%)]" />
-
+          
           {/* Subtle grid pattern */}
           <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)', backgroundSize: '50px 50px' }} />
         </div>
-
+        
         {/* Navigation Bar */}
         <nav className="sticky top-0 z-50 bg-white/80 dark:bg-[#0B1120]/80 backdrop-blur-md border-b border-gray-200 dark:border-white/10 w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center transition-all duration-300">
           <div className="max-w-7xl mx-auto w-full flex justify-between items-center">
             <div className="flex items-center space-x-4">
-              <div
+              <div 
                 className="flex items-center space-x-2 text-emerald-500 cursor-pointer select-none"
                 onClick={handleLogoClick}
               >
@@ -512,7 +528,7 @@ export default function Home() {
                 <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">Tez<span className="text-emerald-500">Chipta</span></span>
               </div>
             </div>
-
+            
             <div className="hidden md:flex items-center space-x-8 text-sm font-medium text-gray-600 dark:text-gray-300">
               <a href="#home" className="hover:text-emerald-500 dark:hover:text-white transition-colors">Bosh sahifa</a>
               <Link to="/blog" className="hover:text-emerald-500 dark:hover:text-white transition-colors">Blog</Link>
@@ -525,7 +541,7 @@ export default function Home() {
               <div className="hidden sm:block">
                 <ThemeToggle />
               </div>
-
+              
               <div className="hidden md:flex items-center space-x-6">
                 {user ? (
                   <div className="flex items-center space-x-4">
@@ -538,7 +554,7 @@ export default function Home() {
                         Admin Panel
                       </Link>
                     )}
-                    <Button
+                    <Button 
                       variant="ghost"
                       size="sm"
                       onClick={logout}
@@ -548,8 +564,8 @@ export default function Home() {
                     </Button>
                   </div>
                 ) : (
-                  <Link
-                    to="/login"
+                  <Link 
+                    to="/login" 
                     className="text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-600 px-6 py-2.5 rounded-full transition-colors shadow-[0_0_15px_rgba(16,185,129,0.3)]"
                   >
                     Kirish / Ro'yxatdan o'tish
@@ -558,7 +574,7 @@ export default function Home() {
               </div>
 
               {/* Mobile Menu Toggle */}
-              <Button
+              <Button 
                 variant="ghost"
                 size="icon"
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -593,7 +609,7 @@ export default function Home() {
                     <img src={logoUrl} alt="Tez Chipta" className="w-8 h-8 object-contain" />
                     <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">TezChipta</span>
                   </div>
-                  <Button
+                  <Button 
                     variant="ghost"
                     size="icon"
                     onClick={() => setIsMobileMenuOpen(false)}
@@ -616,11 +632,11 @@ export default function Home() {
                     <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Mavzu</span>
                     <ThemeToggle />
                   </div>
-
+                  
                   {user ? (
                     <div className="space-y-4">
-                      <Link
-                        to="/profile"
+                      <Link 
+                        to="/profile" 
                         onClick={() => setIsMobileMenuOpen(false)}
                         className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-white/5 rounded-xl"
                       >
@@ -628,15 +644,15 @@ export default function Home() {
                         <span className="font-medium text-gray-900 dark:text-white">{user.name}</span>
                       </Link>
                       {user.role === 'admin' && (
-                        <Link
-                          to="/administrator/dashboard"
+                        <Link 
+                          to="/administrator/dashboard" 
                           onClick={() => setIsMobileMenuOpen(false)}
                           className="block w-full text-center py-3 bg-gray-100 dark:bg-white/5 text-gray-900 dark:text-white rounded-xl font-medium"
                         >
                           Admin Panel
                         </Link>
                       )}
-                      <Button
+                      <Button 
                         variant="ghost"
                         onClick={() => {
                           logout();
@@ -648,8 +664,8 @@ export default function Home() {
                       </Button>
                     </div>
                   ) : (
-                    <Link
-                      to="/login"
+                    <Link 
+                      to="/login" 
                       onClick={() => setIsMobileMenuOpen(false)}
                       className="block w-full text-center py-4 bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/20"
                     >
@@ -664,20 +680,20 @@ export default function Home() {
 
         <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-10 sm:py-16 md:py-24">
           <div className="text-center max-w-4xl mx-auto">
-            <motion.h1
+            <motion.h1 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-4 sm:mb-6 text-gray-900 dark:text-white leading-tight"
             >
               {t('home.hero.title')}
             </motion.h1>
-            <motion.div
+            <motion.div 
               initial={{ scaleX: 0 }}
               animate={{ scaleX: 1 }}
               transition={{ delay: 0.2 }}
-              className="w-12 sm:w-16 h-1 bg-emerald-500 dark:bg-white mx-auto mb-6 sm:mb-8 rounded-full opacity-80"
+              className="w-12 sm:w-16 h-1 bg-emerald-500 dark:bg-white mx-auto mb-6 sm:mb-8 rounded-full opacity-80" 
             />
-            <motion.h2
+            <motion.h2 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
@@ -686,7 +702,7 @@ export default function Home() {
               <span className="text-amber-500">{t('home.hero.highlight')}</span>{' '}
               <span className="text-gray-900 dark:text-white">{t('home.hero.action')}</span>
             </motion.h2>
-            <motion.p
+            <motion.p 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.4 }}
@@ -734,7 +750,7 @@ export default function Home() {
                 <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('home.search.from_label')}</label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
-                  <select
+                  <select 
                     value={searchFrom}
                     onChange={(e) => setSearchFrom(e.target.value)}
                     className="w-full bg-gray-50 dark:bg-[#111827] border border-gray-200 dark:border-white/5 rounded-xl py-3 pl-10 pr-4 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none"
@@ -751,7 +767,7 @@ export default function Home() {
                 <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('home.search.to_label')}</label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
-                  <select
+                  <select 
                     value={searchTo}
                     onChange={(e) => setSearchTo(e.target.value)}
                     className="w-full bg-gray-50 dark:bg-[#111827] border border-gray-200 dark:border-white/5 rounded-xl py-3 pl-10 pr-4 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none"
@@ -768,7 +784,7 @@ export default function Home() {
                 <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('home.search.date_label')}</label>
                 <div className="relative">
                   <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
-                  <select
+                  <select 
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value as 'today' | 'tomorrow' | 'weekly')}
                     className="w-full bg-gray-50 dark:bg-[#111827] border border-gray-200 dark:border-white/5 rounded-xl py-3 pl-10 pr-4 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none"
@@ -780,7 +796,7 @@ export default function Home() {
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                 </div>
               </div>
-              <Button
+              <Button 
                 onClick={() => {
                   const element = document.getElementById('rides');
                   if (element) element.scrollIntoView({ behavior: 'smooth' });
@@ -811,24 +827,30 @@ export default function Home() {
               <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">{t('home.rides.subtitle')}</p>
             </div>
             <div className="flex bg-gray-100 dark:bg-[#111827] rounded-xl p-1 border border-gray-200 dark:border-white/5 overflow-x-auto scrollbar-hide">
-              {(['today', 'tomorrow', 'weekly'] as const).map((date) => (
-                <Button
-                  key={date}
-                  variant="secondary"
-                  onClick={() => setSelectedDate(date)}
-                  className={`px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg font-medium text-xs sm:text-sm transition-all border-0 h-auto whitespace-nowrap flex-1 sm:flex-none flex items-center gap-1.5 ${selectedDate === date
-                    ? 'bg-white dark:bg-[#1E293B] text-gray-900 dark:text-white shadow-sm border border-gray-200 dark:border-white/10'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+              {(['today', 'tomorrow', 'weekly'] as const).map((date) => {
+                const availableCount = rides.filter(r => r.date === date && (r.totalSeats || 40) > (r.bookedSeats?.length || 0)).length;
+                return (
+                  <Button
+                    key={date}
+                    variant="secondary"
+                    onClick={() => setSelectedDate(date)}
+                    className={`px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg font-medium text-xs sm:text-sm transition-all border-0 h-auto whitespace-nowrap flex-1 sm:flex-none ${
+                      selectedDate === date
+                        ? 'bg-white dark:bg-[#1E293B] text-gray-900 dark:text-white shadow-sm border border-gray-200 dark:border-white/10'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                     }`}
-                >
-                  {date === 'today' ? t('home.search.today') : date === 'tomorrow' ? t('home.search.tomorrow') : t('home.search.weekly')}
-                  {ridesCountByDate[date] > 0 && (
-                    <span className="inline-flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5 text-[9px] sm:text-[10px] font-bold bg-emerald-500 text-white rounded-full leading-none">
-                      {ridesCountByDate[date]}
-                    </span>
-                  )}
-                </Button>
-              ))}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                       <span>{date === 'today' ? t('home.search.today') : date === 'tomorrow' ? t('home.search.tomorrow') : t('home.search.weekly')}</span>
+                       {availableCount > 0 && (
+                         <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold">
+                           {availableCount}
+                         </span>
+                       )}
+                    </div>
+                  </Button>
+                );
+              })}
             </div>
           </div>
 
@@ -837,98 +859,99 @@ export default function Home() {
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <AnimatePresence mode="popLayout">
-                {filteredRides.map((ride) => {
-                  const driver = drivers.find(d => d.id === ride.driverId);
-                  return (
-                    <motion.div
-                      layout
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      key={ride.id}
-                      className="bg-white dark:bg-[#111827] rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden hover:border-emerald-500/30 transition-all shadow-sm hover:shadow-md relative group"
-                    >
-                      {ride.busType === 'VIP' && (
-                        <div className="absolute top-0 right-6 bg-amber-500 text-black text-[10px] font-bold px-3 py-1 rounded-b-lg uppercase tracking-wider z-10">{t('home.rides.recommended')}</div>
-                      )}
-                      <div className="p-4 sm:p-6 md:p-8">
-                        <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6 sm:mb-8">
-                          <div className="w-full sm:w-auto">
-                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
-                              <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 dark:text-white">
-                                {ride.busType === 'VIP' ? 'Urganch VIP Express' : ride.busType === 'Lux' ? 'Grand Tour Urganch' : 'Xorazm Comfort'}
-                              </h3>
-                              <span className={`px-2 py-0.5 rounded text-[10px] sm:text-xs font-bold border uppercase tracking-wider ${ride.busType === 'VIP' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
-                                ride.busType === 'Lux' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
-                                  'bg-gray-500/10 text-gray-500 dark:text-gray-400 border-gray-500/20'
-                                }`}>
-                                {ride.busType}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 text-xs sm:text-sm">
-                              <div className="flex items-center text-amber-500 font-bold">
-                                <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current mr-1" />
-                                {ride.rating}
-                              </div>
-                              <span className="text-gray-300 dark:text-gray-600">•</span>
-                              <span className="text-emerald-600 dark:text-emerald-500 font-bold">{ride.from} → {ride.to}</span>
-                            </div>
+              {filteredRides.map((ride) => {
+                const driver = drivers.find(d => d.id === ride.driverId);
+                return (
+                  <motion.div
+                    layout
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    key={ride.id}
+                    className="bg-white dark:bg-[#111827] rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden hover:border-emerald-500/30 transition-all shadow-sm hover:shadow-md relative group"
+                  >
+                    {ride.busType === 'VIP' && (
+                      <div className="absolute top-0 right-6 bg-amber-500 text-black text-[10px] font-bold px-3 py-1 rounded-b-lg uppercase tracking-wider z-10">{t('home.rides.recommended')}</div>
+                    )}
+                    <div className="p-4 sm:p-6 md:p-8">
+                      <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6 sm:mb-8">
+                        <div className="w-full sm:w-auto">
+                          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                            <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 dark:text-white">
+                              {ride.busType === 'VIP' ? 'Urganch VIP Express' : ride.busType === 'Lux' ? 'Grand Tour Urganch' : 'Xorazm Comfort'}
+                            </h3>
+                            <span className={`px-2 py-0.5 rounded text-[10px] sm:text-xs font-bold border uppercase tracking-wider ${
+                              ride.busType === 'VIP' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                              ride.busType === 'Lux' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                              'bg-gray-500/10 text-gray-500 dark:text-gray-400 border-gray-500/20'
+                            }`}>
+                              {ride.busType}
+                            </span>
                           </div>
-                          <div className="sm:text-right w-full sm:w-auto flex sm:flex-col justify-between items-center sm:items-end bg-gray-50 dark:bg-white/5 sm:bg-transparent p-3 sm:p-0 rounded-xl">
-                            <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-widest font-semibold mb-0 sm:mb-1">{t('home.rides.price')}</div>
-                            <div className="text-xl sm:text-2xl md:text-3xl font-black text-emerald-600 dark:text-amber-500">
-                              {formatPrice(ride.price)}
+                          <div className="flex items-center gap-2 text-xs sm:text-sm">
+                            <div className="flex items-center text-amber-500 font-bold">
+                              <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current mr-1" />
+                              {ride.rating}
                             </div>
+                            <span className="text-gray-300 dark:text-gray-600">•</span>
+                            <span className="text-emerald-600 dark:text-emerald-500 font-bold">{ride.from} → {ride.to}</span>
                           </div>
                         </div>
-
-                        <div className="flex items-center justify-between mb-6 sm:mb-10 bg-gray-50/50 dark:bg-white/5 p-4 sm:p-6 rounded-2xl border border-gray-100 dark:border-white/5">
-                          <div className="text-left">
-                            <div className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 dark:text-white mb-0.5 sm:mb-1">{ride.departureTime}</div>
-                            <div className="text-[9px] sm:text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-widest font-bold">{t('home.rides.departure')}</div>
-                            <div className="text-[10px] text-emerald-500 font-medium mt-1">{ride.from}</div>
+                        <div className="sm:text-right w-full sm:w-auto flex sm:flex-col justify-between items-center sm:items-end bg-gray-50 dark:bg-white/5 sm:bg-transparent p-3 sm:p-0 rounded-xl">
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-widest font-semibold mb-0 sm:mb-1">{t('home.rides.price')}</div>
+                          <div className="text-xl sm:text-2xl md:text-3xl font-black text-emerald-600 dark:text-amber-500">
+                            {formatPrice(ride.price)}
                           </div>
-
-                          <div className="flex-1 flex items-center justify-center px-2 sm:px-6 relative">
-                            <div className="absolute top-1/2 left-0 w-full flex items-center -translate-y-1/2 px-2 sm:px-6">
-                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                              <div className="flex-1 border-t-2 border-dashed border-gray-300 dark:border-gray-700"></div>
-                              <div className="px-2 sm:px-4 py-1 sm:py-1.5 rounded-full bg-white dark:bg-[#0B1120] border border-gray-200 dark:border-white/10 text-[10px] sm:text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5 z-10 shadow-sm">
-                                <Clock className="w-3 h-3 text-emerald-500" />
-                                {ride.duration}
-                              </div>
-                              <div className="flex-1 border-t-2 border-dashed border-gray-300 dark:border-gray-700"></div>
-                              <div className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600"></div>
-                            </div>
-                          </div>
-
-                          <div className="text-right">
-                            <div className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 dark:text-white mb-0.5 sm:mb-1">{ride.arrivalTime}</div>
-                            <div className="text-[9px] sm:text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-widest font-bold">Yetib borish</div>
-                            <div className="text-[10px] text-gray-500 font-medium mt-1">{ride.to}</div>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 sm:gap-4 pt-4 sm:pt-6 border-t border-gray-100 dark:border-white/5">
-                          <Button
-                            variant="secondary"
-                            onClick={() => setSelectedDriverId(ride.driverId)}
-                            className="flex-1 sm:flex-none px-4 sm:px-8 py-3 sm:py-3.5 text-sm sm:text-base font-bold rounded-xl"
-                            leftIcon={<Phone className="w-4 h-4" />}
-                          >
-                            {t('home.rides.driver')}
-                          </Button>
-                          <Button
-                            onClick={() => setSelectedRideForSeat(ride.id)}
-                            className="flex-1 sm:flex-none px-4 sm:px-10 py-3 sm:py-3.5 text-sm sm:text-base font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/20"
-                          >
-                            {t('home.rides.book_btn')}
-                          </Button>
                         </div>
                       </div>
-                    </motion.div>
-                  );
-                })}
+                      
+                      <div className="flex items-center justify-between mb-6 sm:mb-10 bg-gray-50/50 dark:bg-white/5 p-4 sm:p-6 rounded-2xl border border-gray-100 dark:border-white/5">
+                        <div className="text-left">
+                          <div className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 dark:text-white mb-0.5 sm:mb-1">{ride.departureTime}</div>
+                          <div className="text-[9px] sm:text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-widest font-bold">{t('home.rides.departure')}</div>
+                          <div className="text-[10px] text-emerald-500 font-medium mt-1">{ride.from}</div>
+                        </div>
+                        
+                        <div className="flex-1 flex items-center justify-center px-2 sm:px-6 relative">
+                          <div className="absolute top-1/2 left-0 w-full flex items-center -translate-y-1/2 px-2 sm:px-6">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                            <div className="flex-1 border-t-2 border-dashed border-gray-300 dark:border-gray-700"></div>
+                            <div className="px-2 sm:px-4 py-1 sm:py-1.5 rounded-full bg-white dark:bg-[#0B1120] border border-gray-200 dark:border-white/10 text-[10px] sm:text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5 z-10 shadow-sm">
+                              <Clock className="w-3 h-3 text-emerald-500" />
+                              {ride.duration}
+                            </div>
+                            <div className="flex-1 border-t-2 border-dashed border-gray-300 dark:border-gray-700"></div>
+                            <div className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600"></div>
+                          </div>
+                        </div>
+                        
+                        <div className="text-right">
+                          <div className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 dark:text-white mb-0.5 sm:mb-1">{ride.arrivalTime}</div>
+                          <div className="text-[9px] sm:text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-widest font-bold">Yetib borish</div>
+                          <div className="text-[10px] text-gray-500 font-medium mt-1">{ride.to}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 sm:gap-4 pt-4 sm:pt-6 border-t border-gray-100 dark:border-white/5">
+                        <Button 
+                          variant="secondary"
+                          onClick={() => setSelectedDriverId(ride.driverId)}
+                          className="flex-1 sm:flex-none px-4 sm:px-8 py-3 sm:py-3.5 text-sm sm:text-base font-bold rounded-xl"
+                          leftIcon={<Phone className="w-4 h-4" />}
+                        >
+                          {t('home.rides.driver')}
+                        </Button>
+                        <Button 
+                          onClick={() => setSelectedRideForSeat(ride.id)}
+                          className="flex-1 sm:flex-none px-4 sm:px-10 py-3 sm:py-3.5 text-sm sm:text-base font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/20"
+                        >
+                          {t('home.rides.book_btn')}
+                        </Button>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
               </AnimatePresence>
               {filteredRides.length === 0 && (
                 <div className="col-span-1 lg:col-span-2 text-center py-12 text-gray-500">
@@ -949,7 +972,7 @@ export default function Home() {
               {t('home.features.subtitle')}
             </p>
           </div>
-
+          
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-white dark:bg-[#111827] p-8 rounded-2xl border border-gray-200 dark:border-white/5 hover:border-emerald-500/30 transition-all shadow-sm">
               <div className="w-12 h-12 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center mb-6">
@@ -958,7 +981,7 @@ export default function Home() {
               <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-white">{t('home.features.f1_title')}</h3>
               <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">{t('home.features.f1_desc')}</p>
             </div>
-
+            
             <div className="bg-white dark:bg-[#111827] p-8 rounded-2xl border border-gray-200 dark:border-white/5 hover:border-emerald-500/30 transition-all shadow-sm">
               <div className="w-12 h-12 bg-blue-500/10 text-blue-500 rounded-xl flex items-center justify-center mb-6">
                 <Camera className="w-6 h-6" />
@@ -966,7 +989,7 @@ export default function Home() {
               <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-white">{t('home.features.f2_title')}</h3>
               <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">{t('home.features.f2_desc')}</p>
             </div>
-
+            
             <div className="bg-white dark:bg-[#111827] p-8 rounded-2xl border border-gray-200 dark:border-white/5 hover:border-emerald-500/30 transition-all shadow-sm">
               <div className="w-12 h-12 bg-amber-500/10 text-amber-500 rounded-xl flex items-center justify-center mb-6">
                 <Headphones className="w-6 h-6" />
@@ -974,7 +997,7 @@ export default function Home() {
               <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-white">{t('home.features.f3_title')}</h3>
               <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">{t('home.features.f3_desc')}</p>
             </div>
-
+            
             <div className="bg-white dark:bg-[#111827] p-8 rounded-2xl border border-gray-200 dark:border-white/5 hover:border-emerald-500/30 transition-all shadow-sm">
               <div className="w-12 h-12 bg-purple-500/10 text-purple-500 rounded-xl flex items-center justify-center mb-6">
                 <ShieldCheck className="w-6 h-6" />
@@ -1015,9 +1038,9 @@ export default function Home() {
                   <div key={review.id} className="bg-white dark:bg-[#111827] rounded-2xl border border-gray-200 dark:border-white/5 p-6 hover:border-emerald-500/30 transition-all shadow-sm flex flex-col">
                     <div className="flex items-center gap-4 mb-4">
                       {review.userPhoto ? (
-                        <img
-                          src={review.userPhoto}
-                          alt={review.userName}
+                        <img 
+                          src={review.userPhoto} 
+                          alt={review.userName} 
                           className="w-12 h-12 rounded-full object-cover"
                           referrerPolicy="no-referrer"
                         />
@@ -1030,9 +1053,9 @@ export default function Home() {
                         <h3 className="text-base font-bold text-gray-900 dark:text-white">{review.userName}</h3>
                         <div className="flex items-center gap-1 text-amber-500 mt-0.5">
                           {[...Array(5)].map((_, i) => (
-                            <Star
-                              key={i}
-                              className={`w-3.5 h-3.5 ${i < review.rating ? 'fill-current' : 'text-gray-300 dark:text-gray-700'}`}
+                            <Star 
+                              key={i} 
+                              className={`w-3.5 h-3.5 ${i < review.rating ? 'fill-current' : 'text-gray-300 dark:text-gray-700'}`} 
                             />
                           ))}
                         </div>
@@ -1054,10 +1077,10 @@ export default function Home() {
               </div>
             )}
           </div>
-
+          
           <div className="mt-12 text-center">
             {user ? (
-              <Button
+              <Button 
                 variant="outline"
                 onClick={() => setShowReviewModal(true)}
                 leftIcon={<MessageCircle className="w-4 h-4" />}
@@ -1103,38 +1126,38 @@ export default function Home() {
               <form className="space-y-5" onSubmit={handleSendMessage}>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('home.contact.name')}</label>
-                  <input
-                    type="text"
+                  <input 
+                    type="text" 
                     required
                     value={messageForm.name}
                     onChange={e => setMessageForm({ ...messageForm, name: e.target.value })}
-                    placeholder="Falonchi Pistonchiyev"
+                    placeholder="Falonchi Pistonchiyev" 
                     className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-[#111827] border border-gray-200 dark:border-white/10 text-gray-900 dark:text-white focus:outline-none focus:border-emerald-500 placeholder-gray-400 dark:placeholder-gray-600"
                   />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('home.contact.contact') || 'Email yoki Telefon'}</label>
-                  <input
-                    type="text"
+                  <input 
+                    type="text" 
                     required
                     value={messageForm.contact}
                     onChange={e => setMessageForm({ ...messageForm, contact: e.target.value })}
-                    placeholder="info@example.com yoki +998..."
+                    placeholder="info@example.com yoki +998..." 
                     className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-[#111827] border border-gray-200 dark:border-white/10 text-gray-900 dark:text-white focus:outline-none focus:border-emerald-500 placeholder-gray-400 dark:placeholder-gray-600"
                   />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Xabar</label>
-                  <textarea
+                  <textarea 
                     required
                     value={messageForm.message}
                     onChange={e => setMessageForm({ ...messageForm, message: e.target.value })}
-                    placeholder="Qanday yordam bera olamiz?"
+                    placeholder="Qanday yordam bera olamiz?" 
                     rows={4}
                     className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-[#111827] border border-gray-200 dark:border-white/10 text-gray-900 dark:text-white focus:outline-none focus:border-emerald-500 placeholder-gray-400 dark:placeholder-gray-600 resize-none"
                   ></textarea>
                 </div>
-                <Button
+                <Button 
                   loading={messageSending}
                   className="w-full"
                   size="lg"
@@ -1145,26 +1168,26 @@ export default function Home() {
             )}
 
             <div className="relative py-4">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-200 dark:border-white/10"></div>
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200 dark:border-white/10"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-4 bg-white dark:bg-[#0B1120] text-gray-500 dark:text-gray-400">Yoki WhatsApp orqali tezkor javob oling</span>
+                </div>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white dark:bg-[#0B1120] text-gray-500 dark:text-gray-400">Yoki WhatsApp orqali tezkor javob oling</span>
-              </div>
-            </div>
 
-            <a
-              href="https://wa.me/998878118917"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20bd5a] text-white px-4 py-3 rounded-xl font-medium transition-colors"
-            >
-              <MessageCircle className="w-5 h-5" />
-              WhatsApp orqali yozish
-            </a>
+              <a 
+                href="https://wa.me/998878118917" 
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20bd5a] text-white px-4 py-3 rounded-xl font-medium transition-colors"
+              >
+                <MessageCircle className="w-5 h-5" />
+                WhatsApp orqali yozish
+              </a>
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
 
       {/* Footer */}
       <footer className="bg-gray-50 dark:bg-[#0B1120] border-t border-gray-200 dark:border-white/10 text-gray-900 dark:text-white pt-16 pb-8 transition-colors duration-300">
@@ -1232,19 +1255,19 @@ export default function Home() {
               </p>
               <div className="relative">
                 <form onSubmit={handleNewsletter}>
-                  <input
-                    type="email"
+                  <input 
+                    type="email" 
                     required
                     value={newsletterEmail}
                     onChange={(e) => setNewsletterEmail(e.target.value)}
-                    placeholder="Email manzilingiz"
+                    placeholder="Email manzilingiz" 
                     className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
                   />
-                  <Button
+                  <Button 
                     type="submit"
                     loading={newsletterLoading}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 p-0 rounded-lg h-auto border-0"
-                    leftIcon={<Send className="w-4 h-4 text-white" />}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 p-0 rounded-lg h-auto border-0" 
+                    leftIcon={<Send className="w-4 h-4 text-white" />} 
                   />
                 </form>
               </div>
@@ -1270,9 +1293,9 @@ export default function Home() {
       >
         {selectedDriver && (
           <div className="text-center">
-            <img
-              src={selectedDriver.photo}
-              alt={selectedDriver.name}
+            <img 
+              src={selectedDriver.photo} 
+              alt={selectedDriver.name} 
               className="w-24 h-24 rounded-full mx-auto mb-4 object-cover border-4 border-white/10"
               referrerPolicy="no-referrer"
             />
@@ -1289,7 +1312,7 @@ export default function Home() {
               {selectedDriver.bio}
             </p>
             <div className="flex gap-3">
-              <Button
+              <Button 
                 variant="secondary"
                 onClick={() => window.location.href = `tel:${selectedDriver.phone}`}
                 className="flex-1"
@@ -1297,7 +1320,7 @@ export default function Home() {
               >
                 Qo'ng'iroq
               </Button>
-              <Button
+              <Button 
                 onClick={() => window.open("https://wa.me/998878118917", "_blank")}
                 className="flex-1"
                 leftIcon={<MessageCircle className="w-5 h-5" />}
@@ -1324,10 +1347,10 @@ export default function Home() {
               <h4 className="font-medium text-gray-900 dark:text-white mb-2">Avtobus suratlari</h4>
               <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                 {selectedRide.images.map((img, i) => (
-                  <img
-                    key={i}
-                    src={img}
-                    alt="Bus interior"
+                  <img 
+                    key={i} 
+                    src={img} 
+                    alt="Bus interior" 
                     className="w-48 h-32 object-cover rounded-xl flex-shrink-0"
                     referrerPolicy="no-referrer"
                   />
@@ -1337,13 +1360,14 @@ export default function Home() {
 
             <div className="bg-gray-50 dark:bg-[#0B1120] border border-gray-200 dark:border-white/5 p-4 sm:p-6 rounded-2xl mb-8 relative">
               <div className="absolute top-4 left-1/2 -translate-x-1/2 text-[10px] sm:text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">{t('home.rides.driver')}</div>
-              <div className={`mt-8 grid gap-2 sm:gap-3 max-w-[320px] mx-auto ${(selectedRide.seatLayout || '2x2') === '2x2' ? 'grid-cols-5' : 'grid-cols-4'
-                }`}>
+              <div className={`mt-8 grid gap-2 sm:gap-3 max-w-[320px] mx-auto ${
+                (selectedRide.seatLayout || '2x2') === '2x2' ? 'grid-cols-5' : 'grid-cols-4'
+              }`}>
                 {Array.from({ length: Math.ceil((selectedRide.totalSeats || 40) / ((selectedRide.seatLayout || '2x2') === '2x2' ? 4 : 3)) * ((selectedRide.seatLayout || '2x2') === '2x2' ? 5 : 4) }).map((_, i) => {
                   const layout = selectedRide.seatLayout || '2x2';
                   const cols = layout === '2x2' ? 5 : 4;
                   const col = i % cols;
-
+                  
                   let isAisle = false;
                   if (layout === '2x2' && col === 2) isAisle = true;
                   if (layout === '2x1' && col === 2) isAisle = true;
@@ -1352,7 +1376,7 @@ export default function Home() {
                   if (isAisle) {
                     return <div key={`aisle-${i}`} className="w-full h-full"></div>;
                   }
-
+                  
                   const row = Math.floor(i / cols);
                   let seatInRow = col;
                   if (layout === '2x2' && col > 2) seatInRow = col - 1;
@@ -1361,7 +1385,7 @@ export default function Home() {
 
                   const seatsPerRow = layout === '2x2' ? 4 : 3;
                   const seatNum = row * seatsPerRow + seatInRow + 1;
-
+                  
                   if (seatNum > (selectedRide.totalSeats || 40)) {
                     return <div key={`empty-${i}`} className="w-full h-full"></div>;
                   }
@@ -1370,21 +1394,22 @@ export default function Home() {
                   const isTaken = !!bookingForSeat;
                   const passengerGender = bookingForSeat?.passengerGender;
                   const isSelected = selectedSeat === seatNum;
-
+                  
                   return (
                     <Button
                       key={seatNum}
                       disabled={isTaken}
                       onClick={() => handleSeatSelect(seatNum)}
                       variant={isSelected ? 'primary' : 'secondary'}
-                      className={`w-full aspect-square rounded-lg flex items-center justify-center text-sm font-medium transition-all p-0 h-auto border-2 ${isTaken
-                        ? passengerGender === 'female'
-                          ? 'bg-red-500 border-red-500 text-white cursor-not-allowed opacity-90'
-                          : 'bg-blue-500 border-blue-500 text-white cursor-not-allowed opacity-90'
-                        : isSelected
-                          ? 'bg-emerald-500 border-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.5)] scale-110'
-                          : 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30 hover:border-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 shadow-sm'
-                        }`}
+                      className={`w-full aspect-square rounded-lg flex items-center justify-center text-sm font-medium transition-all p-0 h-auto border-2 ${
+                        isTaken 
+                          ? passengerGender === 'female'
+                            ? 'bg-red-500 border-red-500 text-white cursor-not-allowed opacity-90'
+                            : 'bg-blue-500 border-blue-500 text-white cursor-not-allowed opacity-90'
+                          : isSelected
+                            ? 'bg-emerald-500 border-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.5)] scale-110'
+                            : 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30 hover:border-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 shadow-sm'
+                      }`}
                     >
                       {seatNum}
                     </Button>
@@ -1443,7 +1468,7 @@ export default function Home() {
           <p className="text-gray-600 dark:text-gray-400 mb-8">
             Sizning o'rindig'ingiz muvaffaqiyatli band qilindi. Chipta ma'lumotlarini profilingizda ko'rishingiz mumkin.
           </p>
-          <Button
+          <Button 
             onClick={() => setPaymentSuccess(false)}
             className="w-full py-3"
           >
@@ -1471,14 +1496,14 @@ export default function Home() {
                   onClick={() => setReviewForm({ ...reviewForm, rating: star })}
                   className="focus:outline-none transition-transform"
                 >
-                  <Star
-                    className={`w-8 h-8 ${star <= reviewForm.rating ? 'text-amber-500 fill-current' : 'text-gray-300 dark:text-gray-700'}`}
+                  <Star 
+                    className={`w-8 h-8 ${star <= reviewForm.rating ? 'text-amber-500 fill-current' : 'text-gray-300 dark:text-gray-700'}`} 
                   />
                 </motion.button>
               ))}
             </div>
           </div>
-
+          
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Sizning fikringiz</label>
             <textarea
@@ -1681,7 +1706,7 @@ export default function Home() {
             {currentBookingId ? "Chek yuborildi!" : "Chipta xarid qilindi!"}
           </h3>
           <p className="text-gray-600 dark:text-gray-400 mb-6">
-            {currentBookingId
+            {currentBookingId 
               ? "To'lov cheki adminga yuborildi. Tasdiqlangandan so'ng chiptangiz tayyor bo'ladi."
               : "To'lov muvaffaqiyatli amalga oshirildi. Chipta ma'lumotlari profilingizda mavjud."}
           </p>
@@ -1706,10 +1731,11 @@ function FAQItem({ question, answer }: { key?: number | string, question: string
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className={`border rounded-xl overflow-hidden transition-all duration-300 ${isOpen
-      ? 'border-emerald-500/30 bg-white dark:bg-[#111827]'
-      : 'border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-[#0B1120]'
-      }`}>
+    <div className={`border rounded-xl overflow-hidden transition-all duration-300 ${
+      isOpen 
+        ? 'border-emerald-500/30 bg-white dark:bg-[#111827]' 
+        : 'border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-[#0B1120]'
+    }`}>
       <Button
         variant="ghost"
         onClick={() => setIsOpen(!isOpen)}
