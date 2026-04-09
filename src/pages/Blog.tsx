@@ -7,8 +7,10 @@ import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, d
 import { useAuth } from '../context/AuthContext';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { Link } from 'react-router-dom';
+import { useLanguage } from '../context/LanguageContext';
 import { SafeImage } from '../components/SafeImage';
 import { Button } from '../components/ui/Button';
+import { Volume2, VolumeX, BellOff } from 'lucide-react';
 
 interface BlogPost {
   id: string;
@@ -31,6 +33,8 @@ export default function Blog() {
   const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [formLoading, setFormLoading] = useState(false);
+  const { t } = useLanguage();
+  const [selectedPost, setSelectedPost] = useState<BlogPost | null>(null);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -97,8 +101,8 @@ export default function Blog() {
   };
 
   const filteredPosts = posts.filter(post => {
-    const matchesSearch = post.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         post.content.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      post.content.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesTag = !selectedTag || (post.tags && post.tags.includes(selectedTag));
     return matchesSearch && matchesTag;
   });
@@ -126,7 +130,7 @@ export default function Blog() {
                 className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20 h-auto"
                 leftIcon={<Plus className="w-5 h-5" />}
               >
-                <span className="hidden sm:inline">Post qo'shish</span>
+                <span className="hidden sm:inline">{t('blog.add_post')}</span>
               </Button>
             )}
           </div>
@@ -140,20 +144,20 @@ export default function Blog() {
           <div className="absolute bottom-0 right-0 w-full h-full bg-[radial-gradient(circle_at_100%_100%,_rgba(16,185,129,0.2)_0%,_transparent_50%)]" />
         </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
-          <motion.h1 
+          <motion.h1
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-4xl sm:text-6xl font-bold text-gray-900 dark:text-white mb-6"
           >
             TezChipta <span className="text-emerald-500">Blogi</span>
           </motion.h1>
-          <motion.p 
+          <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
             className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto"
           >
-            Sayohatlar, yangiliklar va haydovchilarimizdan foydali maslahatlar.
+            {t('blog.subtitle')}
           </motion.p>
         </div>
       </div>
@@ -166,7 +170,7 @@ export default function Blog() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Postlarni qidirish..."
+              placeholder={t('blog.search_placeholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-12 pr-4 py-4 bg-white dark:bg-[#111827] border border-gray-200 dark:border-white/5 rounded-2xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm"
@@ -178,7 +182,7 @@ export default function Blog() {
               onClick={() => setSelectedTag(null)}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all h-auto border-0 ${!selectedTag ? '' : 'bg-white dark:bg-[#111827] text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-white/5 hover:border-emerald-500'}`}
             >
-              Barchasi
+              {t('blog.all_tags')}
             </Button>
             {allTags.map(tag => (
               <Button
@@ -247,14 +251,15 @@ export default function Blog() {
                   </p>
 
                   <div className="flex items-center justify-between pt-6 border-t border-gray-100 dark:border-white/5">
-                    <Button 
+                    <Button
                       variant="ghost"
+                      onClick={() => setSelectedPost(post)}
                       className="flex items-center gap-2 text-emerald-500 font-bold text-sm group/btn p-0 h-auto hover:bg-transparent"
                       rightIcon={<ArrowRight className="w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />}
                     >
-                      Batafsil
+                      {t('blog.read_more')}
                     </Button>
-                    
+
                     {user && (user.role === 'admin' || user.id === post.authorId) && (
                       <div className="flex gap-2">
                         <Button
@@ -292,8 +297,8 @@ export default function Blog() {
             <div className="w-20 h-20 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6">
               <Newspaper className="w-10 h-10 text-gray-400" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Postlar topilmadi</h3>
-            <p className="text-gray-500 dark:text-gray-400">Qidiruv so'rovini o'zgartirib ko'ring.</p>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{t('blog.empty_title')}</h3>
+            <p className="text-gray-500 dark:text-gray-400">{t('blog.empty_desc')}</p>
           </div>
         )}
       </main>
@@ -317,12 +322,12 @@ export default function Blog() {
             >
               <div className="p-6 border-b border-gray-100 dark:border-white/5 flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {editingPost ? 'Postni tahrirlash' : 'Yangi post qo\'shish'}
+                  {editingPost ? t('blog.modal.edit_title') : t('blog.modal.add_title')}
                 </h2>
-                <Button 
+                <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setIsModalOpen(false)} 
+                  onClick={() => setIsModalOpen(false)}
                   className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-full transition-colors h-auto border-0"
                   leftIcon={<X className="w-6 h-6 text-gray-500" />}
                 />
@@ -377,7 +382,7 @@ export default function Blog() {
                     value={formData.content}
                     onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                     className="w-full px-4 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
-                    placeholder="Post mazmunini yozing..."
+                    placeholder={t('blog.modal.content_placeholder')}
                   />
                 </div>
 
@@ -386,9 +391,84 @@ export default function Blog() {
                   loading={formLoading}
                   className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl transition-all shadow-lg shadow-emerald-500/20 mt-4 h-auto"
                 >
-                  {editingPost ? 'Saqlash' : 'Chop etish'}
+                  {editingPost ? t('admin.common.save') : t('blog.publish')}
                 </Button>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Post Detail Modal */}
+      <AnimatePresence>
+        {selectedPost && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedPost(null)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-3xl bg-white dark:bg-[#111827] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="relative aspect-video flex-shrink-0">
+                <img
+                  src={selectedPost.image || `https://picsum.photos/seed/${selectedPost.id}/1200/800`}
+                  alt={selectedPost.title}
+                  className="w-full h-full object-cover"
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSelectedPost(null)}
+                  className="absolute top-4 right-4 bg-black/20 backdrop-blur-md text-white hover:bg-black/40 rounded-full h-10 w-10 border-0 p-0"
+                  leftIcon={<X className="w-6 h-6" />}
+                />
+              </div>
+
+              <div className="p-8 overflow-y-auto">
+                <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 mb-6 font-medium">
+                  <div className="flex items-center gap-2 px-3 py-1 bg-gray-100 dark:bg-white/5 rounded-lg">
+                    <Calendar className="w-4 h-4 text-emerald-500" />
+                    {new Date(selectedPost.createdAt).toLocaleDateString()}
+                  </div>
+                  <div className="flex items-center gap-2 px-3 py-1 bg-gray-100 dark:bg-white/5 rounded-lg">
+                    <UserIcon className="w-4 h-4 text-emerald-500" />
+                    {selectedPost.authorName}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedPost.tags?.map(tag => (
+                      <span key={tag} className="px-3 py-1 bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-lg uppercase tracking-wider">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-6 leading-tight">
+                  {selectedPost.title}
+                </h2>
+
+                <div className="prose prose-emerald dark:prose-invert max-w-none">
+                  <p className="text-lg text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
+                    {selectedPost.content}
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-white/5 flex justify-end">
+                <Button
+                  onClick={() => setSelectedPost(null)}
+                  className="px-8 py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold rounded-xl h-auto"
+                >
+                  {t('blog.modal.close')}
+                </Button>
+              </div>
             </motion.div>
           </div>
         )}

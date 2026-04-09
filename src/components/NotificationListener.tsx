@@ -54,6 +54,8 @@ export function NotificationListener() {
                 const latest = candidates[0];
                 if (!activeNotification || activeNotification.id !== latest.id) {
                     setActiveNotification(latest);
+                    // Mark as seen in session immediately to avoid re-triggering
+                    seenNotifIds.current.add(latest.id);
                 }
             } else if (activeNotification && !snapshot.docs.some(d => d.id === activeNotification.id)) {
                 setActiveNotification(null);

@@ -28,6 +28,7 @@ interface User {
   createdAt: string;
   lastSeenNotificationAt?: string;
   isProfileComplete?: boolean;
+  newsletterSoundEnabled?: boolean;
 }
 
 interface AuthContextType {
@@ -87,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             gender = data.gender || '';
             createdAt = data.createdAt || createdAt;
             lastSeenNotificationAt = data.lastSeenNotificationAt || '';
+            const newsletterSoundEnabled = data.newsletterSoundEnabled;
 
             const hasAllFields =
               name &&
@@ -123,7 +125,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             gender,
             createdAt,
             lastSeenNotificationAt,
-            isProfileComplete
+            isProfileComplete,
+            newsletterSoundEnabled: doc.data().newsletterSoundEnabled ?? true
           });
           setLoading(false);
         }, (error) => {

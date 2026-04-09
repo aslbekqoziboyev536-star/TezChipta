@@ -2,13 +2,13 @@ import { useSettings } from '../context/SettingsContext';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
-import { collection, query, where, getDocs, doc, getDoc, updateDoc, addDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType, withRetry } from '../firebase';
 import { isValidEmail } from '../utils/validation';
 import { useNavigate, Link } from 'react-router-dom';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { Button } from '../components/ui/Button';
-import { Bus, Calendar, Clock, MapPin, User, Mail, ShieldCheck, ArrowLeft, LogOut, Edit2, Check, X, Download, Phone, CreditCard, Navigation, Map } from 'lucide-react';
+import { Bus, Calendar, Clock, MapPin, User, Mail, ShieldCheck, ArrowLeft, LogOut, Edit2, Check, X, Download, Phone, CreditCard, Navigation, Map, Volume2, VolumeX, BellOff } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { WeatherWidget } from '../components/WeatherWidget';
 import { SafeImage } from '../components/SafeImage';
@@ -19,7 +19,7 @@ import { toast } from 'sonner';
 export default function Profile() {
   const { logoUrl } = useSettings();
   const { user, logout, loading: authLoading } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const navigate = useNavigate();
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +33,10 @@ export default function Profile() {
   const [sharingLocationId, setSharingLocationId] = useState<string | null>(null);
   const watchIdRef = React.useRef<number | null>(null);
   const [activeTab, setActiveTab] = useState<'bookings' | 'newsletter'>('bookings');
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [subscriptionId, setSubscriptionId] = useState<string | null>(null);
+  const [checkingSubscription, setCheckingSubscription] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(user?.newsletterSoundEnabled ?? true);
 
   const handleDownloadTicket = async (bookingId: string) => {
     setDownloadingId(bookingId);
@@ -140,7 +144,33 @@ export default function Profile() {
       }
     };
 
+    const checkSubscription = async () => {
+      if (!user?.email) {
+        setCheckingSubscription(false);
+        return;
+      }
+      try {
+        const qSub = query(
+          collection(db, 'newsletter_subscribers'),
+          where('emailLower', '==', user.email.toLowerCase())
+        );
+        const snapshot = await getDocs(qSub);
+        if (!snapshot.empty) {
+          setIsSubscribed(true);
+          setSubscriptionId(snapshot.docs[0].id);
+        } else {
+          setIsSubscribed(false);
+          setSubscriptionId(null);
+        }
+      } catch (error) {
+        console.error("Error checking subscription:", error);
+      } finally {
+        setCheckingSubscription(false);
+      }
+    };
+
     fetchBookings();
+    checkSubscription();
 
     if (user?.role === 'driver') {
       const fetchDriverRides = async () => {
@@ -150,7 +180,7 @@ export default function Profile() {
             where('driverId', '==', user.id)
           );
           const ridesSnapshot = await getDocs(ridesQuery);
-          setDriverRides(ridesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+          setDriverRides(ridesSnapshot.docs.map(d => ({ id: d.id, ...d.data() })));
         } catch (error) {
           console.error("Error fetching driver rides:", error);
         }
@@ -158,6 +188,65 @@ export default function Profile() {
       fetchDriverRides();
     }
   }, [user, authLoading, navigate]);
+
+  const handleNewsletterSubscribe = async () => {
+    if (!user?.email) {
+      toast.error("Email manzilingiz topilmadi");
+      return;
+    }
+    setCheckingSubscription(true);
+    try {
+      const payload = {
+        email: user.email,
+        emailLower: user.email.toLowerCase(),
+        userId: user.id,
+        createdAt: new Date().toISOString(),
+        source: 'profile'
+      };
+      const docRef = await addDoc(collection(db, 'newsletter_subscribers'), payload);
+      setIsSubscribed(true);
+      setSubscriptionId(docRef.id);
+      toast.success("Muvaffaqiyatli obuna bo'ldingiz!");
+    } catch (error) {
+      console.error("Error subscribing:", error);
+      toast.error("Obuna bo'lishda xatolik yuz berdi");
+    } finally {
+      setCheckingSubscription(false);
+    }
+  };
+
+  const handleNewsletterUnsubscribe = async () => {
+    if (!subscriptionId) return;
+    if (!window.confirm("Obunani to'xtatmoqchimisiz?")) return;
+
+    setCheckingSubscription(true);
+    try {
+      await deleteDoc(doc(db, 'newsletter_subscribers', subscriptionId));
+      setIsSubscribed(false);
+      setSubscriptionId(null);
+      toast.success("Obuna to'xtatildi");
+    } catch (error) {
+      console.error("Error unsubscribing:", error);
+      toast.error("Xatolik yuz berdi");
+    } finally {
+      setCheckingSubscription(false);
+    }
+  };
+
+  const handleToggleSound = async () => {
+    if (!user) return;
+    const newSoundState = !soundEnabled;
+    setSoundEnabled(newSoundState);
+    try {
+      await updateDoc(doc(db, 'users', user.id), {
+        newsletterSoundEnabled: newSoundState
+      });
+      toast.success(newSoundState ? "Ovozli bildirishnomalar yoqildi" : "Ovozli bildirishnomalar o'chirildi");
+    } catch (error) {
+      console.error("Error toggling sound:", error);
+      toast.error("Nastroykani saqlashda xatolik yuz berdi");
+    }
+  };
 
   // Newsletter auto-subscription
   useEffect(() => {
@@ -243,11 +332,11 @@ export default function Profile() {
   }, []);
 
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('uz-UZ').format(price) + " so'm";
+    return new Intl.NumberFormat(language === 'uz' ? 'uz-UZ' : language === 'ru' ? 'ru-RU' : 'en-US').format(price) + (language === 'uz' ? " so'm" : language === 'ru' ? " сум" : " sum");
   };
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('uz-UZ', {
+    return new Date(dateStr).toLocaleDateString(language === 'uz' ? 'uz-UZ' : language === 'ru' ? 'ru-RU' : 'en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -257,7 +346,7 @@ export default function Profile() {
   };
 
   if (authLoading || loading) {
-    return <LoadingScreen message="Loading your profile..." />;
+    return <LoadingScreen message={t('profile.loading')} />;
   }
 
   return (
@@ -269,7 +358,7 @@ export default function Profile() {
             <Link to="/" className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-full transition-colors">
               <ArrowLeft className="w-5 h-5 text-gray-500 dark:text-gray-400" />
             </Link>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">My Profile</h1>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">{t('profile.header')}</h1>
           </div>
           <div className="flex items-center gap-4">
             <ThemeToggle />
@@ -362,14 +451,14 @@ export default function Profile() {
                 </div>
               )}
 
-              <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm mb-4 sm:mb-6">{user?.email || user?.phoneNumber}</p>
+              <p className="text-gray-700 dark:text-gray-200 text-xs sm:text-sm mb-4 sm:mb-6 font-medium">{user?.email || user?.phoneNumber}</p>
 
               <div className="space-y-2 sm:space-y-3 text-left">
                 <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 bg-gray-50 dark:bg-[#0B1120] rounded-xl border border-gray-100 dark:border-white/5">
                   <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
                   <div>
-                    <div className="text-[8px] sm:text-[10px] text-gray-500 uppercase tracking-wider">Status</div>
-                    <div className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white capitalize">
+                    <div className="text-[10px] sm:text-[11px] text-gray-600 dark:text-gray-300 uppercase tracking-widest font-bold mb-0.5">Status</div>
+                    <div className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white capitalize bg-emerald-100/50 dark:bg-emerald-500/20 px-2 py-0.5 rounded-md">
                       {user?.role === 'admin' ? 'Admin' : user?.role === 'driver' ? 'Haydovchi' : 'Foydalanuvchi'}
                     </div>
                   </div>
@@ -377,8 +466,8 @@ export default function Profile() {
                 <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 bg-gray-50 dark:bg-[#0B1120] rounded-xl border border-gray-100 dark:border-white/5">
                   <Mail className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
                   <div>
-                    <div className="text-[8px] sm:text-[10px] text-gray-500 uppercase tracking-wider">{user?.email ? t('profile.settings.email') : 'Telefon'}</div>
-                    <div className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate max-w-[140px] sm:max-w-[180px]">{user?.email || user?.phoneNumber}</div>
+                    <div className="text-[10px] sm:text-[11px] text-gray-600 dark:text-gray-300 uppercase tracking-widest font-bold mb-0.5">{user?.email ? t('profile.settings.email') : 'Telefon'}</div>
+                    <div className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white truncate max-w-[140px] sm:max-w-[180px]">{user?.email || user?.phoneNumber}</div>
                   </div>
                 </div>
                 {user?.phoneNumber && user?.email && (
@@ -598,19 +687,68 @@ export default function Profile() {
                   )}
                 </div>
               ) : (
-                <div className="bg-white dark:bg-[#111827] rounded-2xl p-8 sm:p-12 text-center border border-gray-200 dark:border-white/5 shadow-sm space-y-6">
+                <div className="bg-white dark:bg-[#111827] rounded-2xl p-8 sm:p-12 border border-gray-200 dark:border-white/5 shadow-sm space-y-8">
                   <div className="w-20 h-20 bg-emerald-50 dark:bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto">
                     <Mail className="w-10 h-10 text-emerald-500" />
                   </div>
-                  <div className="max-w-md mx-auto">
-                    <h4 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Newsletter</h4>
-                    <p className="text-gray-600 dark:text-gray-400 mb-8">
-                      {t('home.footer.newsletter_desc') || "Siz bizning yangiliklar byulletenimizga muvaffaqiyatli obuna bo'lgansiz. Endi siz barcha yangiliklar va maxsus takliflardan xabardor bo'lib turasiz."}
-                    </p>
-                    <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl inline-flex items-center gap-3">
-                      <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                      <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">Holat: Faol obunachi</span>
+
+                  <div className="max-w-md mx-auto space-y-6">
+                    <div className="text-center">
+                      <h4 className="text-2xl font-black text-gray-900 dark:text-white mb-3">Newsletter</h4>
+                      <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
+                        {isSubscribed ? t('home.footer.newsletter_desc') : t('profile.newsletter.not_subscribed')}
+                      </p>
                     </div>
+
+                    {checkingSubscription ? (
+                      <div className="py-4">
+                        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                      </div>
+                    ) : isSubscribed ? (
+                      <div className="space-y-6">
+                        <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl flex items-center justify-center gap-3">
+                          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                          <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{t('profile.newsletter.active_status')}</span>
+                        </div>
+
+                        {/* Settings Section */}
+                        <div className="pt-6 border-t border-gray-100 dark:border-white/5 space-y-4">
+                          <h5 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-widest">{t('profile.newsletter.settings_title')}</h5>
+
+                          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-[#0B1120] rounded-2xl border border-gray-100 dark:border-white/5 transition-all hover:border-emerald-500/30">
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2 rounded-xl ${soundEnabled ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600' : 'bg-gray-100 dark:bg-white/5 text-gray-400'}`}>
+                                {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                              </div>
+                              <span className="text-sm font-bold text-gray-700 dark:text-gray-200">{t('profile.newsletter.sound_label')}</span>
+                            </div>
+                            <button
+                              onClick={handleToggleSound}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${soundEnabled ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-gray-700'}`}
+                            >
+                              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${soundEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                            </button>
+                          </div>
+
+                          <Button
+                            variant="secondary"
+                            onClick={handleNewsletterUnsubscribe}
+                            className="w-full py-4 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-2xl border-0 font-bold transition-all h-auto"
+                            leftIcon={<BellOff className="w-5 h-5" />}
+                          >
+                            {t('profile.newsletter.unsubscribe_btn')}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button
+                        onClick={handleNewsletterSubscribe}
+                        className="w-full py-5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-2xl shadow-xl shadow-emerald-500/20 transition-all scale-100 active:scale-95 h-auto group"
+                        leftIcon={<Mail className="w-6 h-6 group-hover:rotate-12 transition-transform" />}
+                      >
+                        {t('profile.newsletter.subscribe_btn')}
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}
