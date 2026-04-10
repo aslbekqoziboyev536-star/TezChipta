@@ -1338,6 +1338,12 @@ async function startServer() {
     console.log("index.html exists:", fs.existsSync(path.join(distPath, 'index.html')));
     console.log("assets folder exists:", fs.existsSync(path.join(distPath, 'assets')));
     
+    // Check if dist exists, if not log warning
+    if (!fs.existsSync(distPath)) {
+      console.warn("⚠️  WARNING: dist folder not found. Build may not have completed successfully.");
+      console.warn("⚠️  Server will still attempt to serve but may fail. Check Render logs for build errors.");
+    }
+    
     // Add request logging for debugging
     app.use((req, res, next) => {
       const start = Date.now();
@@ -1362,14 +1368,37 @@ async function startServer() {
         res.setHeader('Content-Type', 'font/woff2');
       } else if (req.path.endsWith('.woff')) {
         res.setHeader('Content-Type', 'font/woff');
+      } else if (req.path.endsWith('.png')) {
+        res.setHeader('Content-Type', 'image/png');
+      } else if (req.path.endsWith('.jpg') || req.path.endsWith('.jpeg')) {
+        res.setHeader('Content-Type', 'image/jpeg');
+      } else if (req.path.endsWith('.gif')) {
+        res.setHeader('Content-Type', 'image/gif');
       }
       next();
     });
 
     // Serve public files first as they are source assets
-    app.use(express.static(publicPath));
+    app.use(express.static(publicPath, {
+      setHeaders: (res, path) => {
+        if (path.endsWith('.js')) {
+          res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        } else if (path.endsWith('.css')) {
+          res.setHeader('Content-Type', 'text/css; charset=utf-8');
+        }
+      }
+    }));
+    
     // Then serve built files
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      setHeaders: (res, path) => {
+        if (path.endsWith('.js')) {
+          res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        } else if (path.endsWith('.css')) {
+          res.setHeader('Content-Type', 'text/css; charset=utf-8');
+        }
+      }
+    }));
     
     // Explicit route for manifest to ensure correct MIME type
     app.get(['/manifest.webmanifest', '/manifest.json'], (req, res) => {
