@@ -284,97 +284,98 @@ service cloud.firestore {
     // Rules
     // ===============================================================
 
+    // General rule for all collections: Admin can do anything
+    // For specific collections, we add user-level rules
+    
     match /reviews/{reviewId} {
       allow read: if resource.data.status == 'approved' || isAdmin();
       allow create: if isServer(request.resource.data) || (isAuthenticated() && isValidReview(request.resource.data) && request.resource.data.status == 'pending');
-      allow update: if isServer(request.resource.data) || (isAdmin() && isValidReview(request.resource.data));
-      allow delete: if isAdmin();
+      allow update, delete: if isAdmin();
     }
 
     match /drivers/{driverId} {
       allow read: if true;
-      allow create: if isServer(request.resource.data) || (isAdminOrInWhitelist() && isValidDriver(request.resource.data));
-      allow update: if isServer(request.resource.data) || (isAdminOrInWhitelist() && isValidDriver(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdminOrInWhitelist();
+      allow write: if isAdmin();
     }
 
     match /rides/{rideId} {
       allow read: if true;
-      allow create: if isServer(request.resource.data) || (isAdminOrInWhitelist() && isValidRide(request.resource.data));
-      allow update: if isServer(request.resource.data) || (isAdminOrInWhitelist() && isValidRide(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdminOrInWhitelist();
+      allow write: if isAdmin();
     }
 
     match /faqs/{faqId} {
       allow read: if true;
-      allow create: if isServer(request.resource.data) || (isAdminOrInWhitelist() && isValidFaq(request.resource.data));
-      allow update: if isServer(request.resource.data) || (isAdminOrInWhitelist() && isValidFaq(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdminOrInWhitelist();
+      allow write: if isAdmin();
     }
 
     match /users/{userId} {
-      allow read: if true; // Allow public reads for role checks on server
-      allow create: if isServer(request.resource.data) || (isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == 'user' || request.auth.token.email == "qoziboyevaslbek359@gmail.com" || isAdminOrInWhitelist()));
-      allow update: if isServer(request.resource.data) || (isAuthenticated() && (isOwner(userId) || isAdminOrInWhitelist()) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdminOrInWhitelist()));
-      allow delete: if isServer(resource.data) || isAdminOrInWhitelist();
+      allow read: if isAuthenticated(); // Needed for profile lookups and admin panel
+      allow create: if isServer(request.resource.data) || (isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data)) || isAdmin();
+      allow update: if isServer(request.resource.data) || (isAuthenticated() && (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data));
+      allow delete: if isAdmin();
     }
 
     match /bookings/{bookingId} {
-      allow read: if true;
-      allow create: if isServer(request.resource.data) || (isAuthenticated() && isValidBooking(request.resource.data));
-      allow update: if isServer(request.resource.data) || (isAuthenticated() && (resource.data.userId == request.auth.uid || isAdminOrInWhitelist()) && isValidBooking(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdminOrInWhitelist();
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidBooking(request.resource.data);
+      allow update: if (isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidBooking(request.resource.data));
+      allow delete: if isAdmin();
     }
 
     match /messages/{messageId} {
-      allow read: if isAdminOrInWhitelist();
-      allow create: if isServer(request.resource.data) || isValidMessage(request.resource.data);
-      allow update: if isServer(request.resource.data) || (isAdminOrInWhitelist() && isValidMessage(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdminOrInWhitelist();
+      allow read: if isAdmin();
+      allow create: if isValidMessage(request.resource.data);
+      allow update, delete: if isAdmin();
     }
 
     match /newsletter_subscribers/{subscriberId} {
-      allow read: if isAdminOrInWhitelist();
+      allow read: if isAdmin();
       allow create: if isValidNewsletterSubscriber(request.resource.data);
-      allow update: if isAdminOrInWhitelist() && isValidNewsletterSubscriber(request.resource.data);
-      allow delete: if isAdminOrInWhitelist();
+      allow update, delete: if isAdmin();
     }
 
     match /newsletters/{newsletterId} {
-      allow read, write: if isAdminOrInWhitelist();
+      allow read, write: if isAdmin();
     }
 
     match /newsletter_history/{historyId} {
-      allow read, write: if isAdminOrInWhitelist();
+      allow read, write: if isAdmin();
     }
 
     match /chats/{chatId} {
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isServer(request.resource.data) || (isAuthenticated() && isValidChat(request.resource.data) && (request.resource.data.userId == request.auth.uid || isAdmin()));
-      allow update: if isServer(request.resource.data) || (isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidChat(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdmin();
+      allow create: if isAuthenticated() && isValidChat(request.resource.data) && (request.resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidChat(request.resource.data);
+      allow delete: if isAdmin();
       
       match /messages/{messageId} {
         allow read: if isAuthenticated() && (get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid || isAdmin());
-        allow create: if isServer(request.resource.data) || (isAuthenticated() && isValidChatMessage(request.resource.data) && (get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid || isAdmin()));
+        allow create: if (isAuthenticated() && isValidChatMessage(request.resource.data) && (get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid || isAdmin()));
       }
+    }
+
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAdmin() || isServer(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
     }
 
     match /blogs/{blogId} {
       allow read: if true;
-      allow create: if isServer(request.resource.data) || (isAuthenticated() && (isAdminOrInWhitelist() || isDriver()) && isValidBlog(request.resource.data));
-      allow update: if isServer(request.resource.data) || (isAuthenticated() && (isAdminOrInWhitelist() || (isDriver() && resource.data.authorId == request.auth.uid)) && isValidBlog(request.resource.data));
-      allow delete: if isAdminOrInWhitelist() || (isDriver() && resource.data.authorId == request.auth.uid);
+      allow create: if (isAdmin() || (isDriver() && isValidBlog(request.resource.data)));
+      allow update: if (isAdmin() || (isDriver() && resource.data.authorId == request.auth.uid && isValidBlog(request.resource.data)));
+      allow delete: if isAdmin() || (isDriver() && resource.data.authorId == request.auth.uid);
     }
 
     match /settings/payment {
       allow read: if true;
-      allow write: if isServer(request.resource.data) || (isAdmin() && isValidSettings(request.resource.data));
+      allow write: if isAdmin();
     }
 
     match /settings/{settingId} {
       allow read: if true;
-      allow write: if isServer(request.resource.data) || isAdmin();
+      allow write: if isAdmin();
     }
   }
 }
