@@ -87,7 +87,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && (
-        request.auth.token.email.lower() == "qoziboyevaslbek359@gmail.com" ||
+        (request.auth.token.email != null && request.auth.token.email.lower() == "qoziboyevaslbek359@gmail.com") ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
       );
@@ -95,10 +95,12 @@ service cloud.firestore {
 
     function isAdminOrInWhitelist() {
       return isAuthenticated() && (
-        request.auth.token.email.lower() == "qoziboyevaslbek359@gmail.com" ||
+        (request.auth.token.email != null && (
+          request.auth.token.email.lower() == "qoziboyevaslbek359@gmail.com" ||
+          request.auth.token.email.lower() in ["admin@tezchipta.uz", "support@tezchipta.uz"]
+        )) ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-        request.auth.token.email.lower() in ["admin@tezchipta.uz", "support@tezchipta.uz"]
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
       );
     }
 
