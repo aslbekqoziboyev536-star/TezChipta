@@ -29,7 +29,6 @@
     "google-auth-library": "^10.6.2",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.546.0",
-    "mongoose": "^9.3.1",
     "motion": "^12.23.24",
     "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4",

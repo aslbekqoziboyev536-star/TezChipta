@@ -1,9 +1,8 @@
 # Supabase Integration Guide
 
 ## Overview
-TezChipta is now integrated with both **MongoDB** and **Supabase** for comprehensive data management:
-- **MongoDB**: Primary database for core application data and payment logging
-- **Supabase**: PostgreSQL-based backend for analytics, real-time features, and additional data logging
+TezChipta is now integrated with **Supabase** for comprehensive data management:
+- **Supabase**: PostgreSQL-based backend for analytics, real-time features, and data logging
 
 ## Environment Variables
 
@@ -123,30 +122,24 @@ Stores all payment-related events for analytics and audit trails.
 
 ### Payment Upload Flow
 1. User uploads payment receipt via `/api/upload-payment-receipt`
-2. Data logged to MongoDB (primary)
-3. Data logged to Supabase `payment_logs` table
-4. Admin reviews and confirms via `/api/admin/confirm-manual-payment`
-5. Confirmation logged to both MongoDB and Supabase
+2. Data logged to Supabase `payment_logs` table
+3. Admin reviews and confirms via `/api/admin/confirm-manual-payment`
+4. Confirmation logged to Supabase
 
 ## Error Handling
 
-Both MongoDB and Supabase are set up with graceful fallback:
-- If one fails, the other continues to work
+Supabase is set up with graceful error handling:
 - Errors are logged to console but don't break the operation
 - All operations gracefully skip Supabase if not configured
 
 ## Benefits
 
-✅ **Dual Database Strategy**
-- MongoDB: Reliability and proven performance
-- Supabase: Real-time capabilities and analytics
+✅ **Unified Database Strategy**
+- Supabase: Real-time capabilities, analytics, and PostgreSQL reliability
 
 ✅ **Enhanced Analytics**
 - Track all payment events in Supabase for better reporting
 - Real-time payment status updates
-
-✅ **Redundancy**
-- Even if one database goes down, the application continues to function
 
 ✅ **Future-Ready**
 - Easy to add real-time features (Supabase subscriptions)

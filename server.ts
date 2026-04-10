@@ -7,7 +7,6 @@ import { fileURLToPath } from "url";
 import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
 import { OAuth2Client } from "google-auth-library";
-import mongoose from "mongoose";
 import admin from "firebase-admin";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
@@ -278,39 +277,6 @@ async function startServer() {
     next();
   });
 
-  // MongoDB Connection
-  const MONGODB_URI = process.env.MONGODB_URI;
-  let paymentLogCollection: any;
-  
-  if (MONGODB_URI) {
-    mongoose.connect(MONGODB_URI, {
-      serverSelectionTimeoutMS: 5000,
-    })
-      .then(() => {
-        console.log("MongoDB connected successfully");
-        // Create payment log collection and indexes
-        const db = mongoose.connection.db;
-        if (db) {
-          db.collection('payment_logs').createIndex({ bookingId: 1, createdAt: 1 });
-          db.collection('payment_logs').createIndex({ status: 1 });
-          db.collection('payment_logs').createIndex({ createdAt: 1 });
-          paymentLogCollection = db.collection('payment_logs');
-        }
-      })
-      .catch(err => {
-        console.error("MongoDB connection error:", err.message);
-        if (err.message.includes("Could not connect to any servers") || err.message.includes("whitelist")) {
-          console.error("ACTION REQUIRED: Your IP address is likely not whitelisted in MongoDB Atlas.");
-          console.error("Please go to MongoDB Atlas -> Network Access -> Add IP Address -> Allow Access From Anywhere (0.0.0.0/0).");
-        }
-        if (err.message.includes("authentication failed")) {
-          console.error("CRITICAL: MongoDB authentication failed. Please check your MONGODB_URI credentials.");
-        }
-      });
-  } else {
-    console.warn("MONGODB_URI not found in environment variables. MongoDB features will be unavailable.");
-  }
-
   app.use(cors({
     origin: (origin, callback) => {
       if (!origin) {
@@ -366,6 +332,21 @@ async function startServer() {
         cancel_url: `${APP_URL}/`,
       });
 
+      // Log checkout session creation to Supabase
+      try {
+        await logToSupabase('payment_logs', {
+          booking_id: bookingId,
+          user_id: (req as any).user.uid,
+          event: 'checkout_session_created',
+          status: 'pending',
+          stripe_session_id: session.id,
+          amount: price,
+          currency: 'uzs'
+        });
+      } catch (supabaseError) {
+        console.warn("Error logging to Supabase:", supabaseError);
+      }
+
       res.json({ id: session.id, url: session.url });
     } catch (error: any) {
       console.error("Stripe session creation error:", error);
@@ -394,6 +375,20 @@ async function startServer() {
           stripeSessionId: session.id,
           updatedAt: new Date().toISOString(),
         });
+
+        // Log payment confirmation to Supabase
+        try {
+          await logToSupabase('payment_logs', {
+            booking_id: bookingId,
+            user_id: session.customer_email || 'unknown',
+            event: 'payment_completed',
+            status: 'paid',
+            stripe_session_id: session.id,
+            confirmed_at: new Date().toISOString()
+          });
+        } catch (supabaseError) {
+          console.warn("Error logging to Supabase:", supabaseError);
+        }
 
         res.json({ success: true, bookingId });
       } else {
@@ -764,24 +759,7 @@ async function startServer() {
         updatedAt: uploadedAt.toISOString()
       });
 
-      // Log to MongoDB if available
-      if (paymentLogCollection) {
-        try {
-          await paymentLogCollection.insertOne({
-            bookingId,
-            userId: (req as any).user.uid,
-            event: 'receipt_uploaded',
-            status: 'pending_review',
-            uploadedAt: uploadedAt.toISOString(),
-            expiresAt: expiresAt.toISOString(),
-            timeoutSeconds: MANUAL_PAYMENT_TIMEOUT_SECONDS
-          });
-        } catch (mongoError) {
-          console.warn("Error logging to MongoDB:", mongoError);
-        }
-      }
-
-      // Log to Supabase if available (for better analytics)
+      // Log to Supabase for analytics
       try {
         await logToSupabase('payment_logs', {
           booking_id: bookingId,
@@ -836,22 +814,7 @@ async function startServer() {
 
       await updateClientDoc(bookingRef, updateData);
 
-      // Log to MongoDB if available
-      if (paymentLogCollection) {
-        try {
-          await paymentLogCollection.insertOne({
-            bookingId,
-            adminId: (req as any).user.uid,
-            event: 'payment_confirmed',
-            status: status,
-            confirmedAt: new Date().toISOString()
-          });
-        } catch (mongoError) {
-          console.warn("Error logging to MongoDB:", mongoError);
-        }
-      }
-
-      // Log to Supabase if available (for better analytics)
+      // Log to Supabase for analytics
       try {
         await logToSupabase('payment_logs', {
           booking_id: bookingId,
