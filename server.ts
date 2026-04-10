@@ -1382,22 +1382,55 @@ async function startServer() {
 
     // Serve built files with explicit error handling
     app.use('/assets', (req, res, next) => {
-      const filePath = path.join(distPath, 'assets', req.path);
+      // req.path starts with "/" so we need to slice it off for proper path joining
+      const fileName = req.path.slice(1); // Remove leading /
+      const filePath = path.join(distPath, 'assets', fileName);
+      
+      console.log(`📦 Asset request: /assets${req.path}`);
+      console.log(`   Resolved to: ${filePath}`);
+      console.log(`   File exists: ${fs.existsSync(filePath)}`);
       
       if (!fs.existsSync(filePath)) {
         console.error(`❌ Asset not found: /assets${req.path}`);
         console.error(`   Expected at: ${filePath}`);
-        console.error(`   distPath: ${distPath}`);
         // List available files for debugging
         const assetsDir = path.join(distPath, 'assets');
         if (fs.existsSync(assetsDir)) {
-          const files = fs.readdirSync(assetsDir).slice(0, 5);
-          console.error(`   Available files sample: ${files.join(', ')}`);
+          const files = fs.readdirSync(assetsDir);
+          console.error(`   Total files in assets dir: ${files.length}`);
+          // Try to find similar files
+          const searchName = fileName.split('-').slice(0, 2).join('-');
+          const matching = files.filter(f => f.includes(searchName));
+          if (matching.length > 0) {
+            console.error(`   Files matching "${searchName}": ${matching.slice(0, 3).join(', ')}`);
+          }
         }
-        return res.status(404).set('Content-Type', 'text/plain').send(`Asset not found: ${req.path}`);
+        return res.status(404).set('Content-Type', 'text/plain').send(`Asset not found: /assets${req.path}`);
       }
       
-      res.sendFile(filePath);
+      // Set content type based on file extension
+      if (req.path.endsWith('.js')) {
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      } else if (req.path.endsWith('.css')) {
+        res.setHeader('Content-Type', 'text/css; charset=utf-8');
+      } else if (req.path.endsWith('.json')) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      } else if (req.path.endsWith('.png')) {
+        res.setHeader('Content-Type', 'image/png');
+      } else if (req.path.endsWith('.svg')) {
+        res.setHeader('Content-Type', 'image/svg+xml');
+      }
+      
+      res.sendFile(filePath, (err) => {
+        if (err) {
+          console.error(`❌ Error serving asset /assets${req.path}:`, err.message);
+          if (!res.headersSent) {
+            res.status(500).set('Content-Type', 'text/plain').send(`Error serving asset: ${err.message}`);
+          }
+        } else {
+          console.log(`✅ Served asset: /assets${req.path}`);
+        }
+      });
     });
 
     // Serve public files (robots.txt, sitemap.xml, etc.)
