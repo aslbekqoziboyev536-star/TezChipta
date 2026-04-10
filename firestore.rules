@@ -338,6 +338,14 @@ service cloud.firestore {
       allow delete: if isAdminOrInWhitelist();
     }
 
+    match /newsletters/{newsletterId} {
+      allow read, write: if isAdminOrInWhitelist();
+    }
+
+    match /newsletter_history/{historyId} {
+      allow read, write: if isAdminOrInWhitelist();
+    }
+
     match /chats/{chatId} {
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isServer(request.resource.data) || (isAuthenticated() && isValidChat(request.resource.data) && (request.resource.data.userId == request.auth.uid || isAdmin()));

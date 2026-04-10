@@ -45,6 +45,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { supabase } from '../lib/supabase';
 
 export default function Home() {
   const { logoUrl } = useSettings();
@@ -75,6 +76,7 @@ export default function Home() {
   const [manualEnabled, setManualEnabled] = useState(true);
   const [timer, setTimer] = useState(30); // Reduced to 30 seconds
   const [receiptFile, setReceiptFile] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [currentBookingId, setCurrentBookingId] = useState<string | null>(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -405,11 +407,12 @@ export default function Home() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 800 * 1024) { // 800KB limit to stay under Firestore 1MB doc limit after base64
-      toast.error("Rasm hajmi juda katta (maksimum 800KB). Iltimos, kichikroq rasm yuklang.");
+    if (file.size > 5 * 1024 * 1024) { // 5MB limit for Supabase
+      toast.error("Rasm hajmi juda katta (maksimum 5MB).");
       return;
     }
 
+    setSelectedFile(file);
     const reader = new FileReader();
     reader.onloadend = () => {
       setReceiptFile(reader.result as string);
@@ -418,25 +421,51 @@ export default function Home() {
   };
 
   const submitReceipt = async () => {
-    if (!currentBookingId || !receiptFile) return;
+    if (!currentBookingId || !selectedFile) return;
 
     setUploadingReceipt(true);
     try {
-      const bookingRef = doc(db, "bookings", currentBookingId);
-      await updateDoc(bookingRef, {
-        paymentStatus: "pending_review",
-        paymentMethod: "manual",
-        receiptUrl: receiptFile,
-        receiptUploadedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+      // 1. Upload to Supabase Storage
+      const fileExt = selectedFile.name.split('.').pop();
+      const fileName = `${currentBookingId}_${Math.random().toString(36).slice(2)}.${fileExt}`;
+      const filePath = `receipts/${fileName}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('payment-receipts')
+        .upload(filePath, selectedFile, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('payment-receipts')
+        .getPublicUrl(filePath);
+
+      // 2. Update via backend API
+      const idToken = await auth.currentUser?.getIdToken();
+      const response = await fetch('/api/upload-payment-receipt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          bookingId: currentBookingId,
+          receiptUrl: publicUrl
+        })
       });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Xatolik yuz berdi");
 
       setShowManualPayment(false);
       setPaymentSuccess(true);
       toast.success("Chek muvaffaqiyatli yuklandi. Admin tasdiqlashini kuting.");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Receipt upload failed:", error);
-      handleFirestoreError(error, OperationType.UPDATE, `bookings/${currentBookingId}`);
+      toast.error(error.message || "Chek yuklashda xatolik yuz berdi");
     } finally {
       setUploadingReceipt(false);
     }

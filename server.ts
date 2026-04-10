@@ -273,7 +273,11 @@ async function startServer() {
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
     res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
-    res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: https:; connect-src 'self' https://identitytoolkit.googleapis.com https://www.googleapis.com https://firestore.googleapis.com https://storage.googleapis.com https://qrcode.to; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-ancestors 'none';");
+    if (process.env.NODE_ENV !== "production") {
+      res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data: https:; connect-src 'self' ws: wss: http: https: https://identitytoolkit.googleapis.com https://www.googleapis.com https://firestore.googleapis.com https://storage.googleapis.com https://qrcode.to; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-ancestors 'none';");
+    } else {
+      res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: https:; connect-src 'self' https://identitytoolkit.googleapis.com https://www.googleapis.com https://firestore.googleapis.com https://storage.googleapis.com https://qrcode.to; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-ancestors 'none';");
+    }
     next();
   });
 

@@ -892,12 +892,35 @@ export default function Admin() {
   };
 
   const handleSendNewsletter = async () => {
-    if (!newsletterForm.subject || !newsletterForm.content || filteredNewsletterSubscribers.length === 0) return;
+    if (!newsletterForm.subject || !newsletterForm.content || filteredNewsletterSubscribers.length === 0) {
+      if (filteredNewsletterSubscribers.length === 0) {
+        toast.error("Hali obunachilar yo'q.");
+      }
+      return;
+    }
 
     setFormLoading(true);
     try {
-      // In a real-world scenario, you would call a backend API or a Cloud Function here.
-      // For this implementation, we'll simulate the broadcast by creating a 'newsletter_history' entry.
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error("Avtorizatsiya xatoligi. Iltimos qayta kiring.");
+
+      const response = await fetch('/api/admin/newsletter/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          subject: newsletterForm.subject,
+          message: newsletterForm.content,
+          htmlContent: `<div>${newsletterForm.content.replace(/\n/g, '<br/>')}</div>`
+        })
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Xabar yuborishda xatolik yuz berdi");
+
+      // Also keep record in history for UI if needed (though API might handle it)
       const broadcastData = {
         subject: newsletterForm.subject,
         content: newsletterForm.content,
@@ -905,15 +928,14 @@ export default function Admin() {
         subscriberCount: filteredNewsletterSubscribers.length,
         recipients: filteredNewsletterSubscribers.map(s => s.email).filter(Boolean)
       };
-
       await addDoc(collection(db, 'newsletter_history'), broadcastData);
 
-      toast.success(`${filteredNewsletterSubscribers.length} ta obunachiga xabar yuborildi!`);
+      toast.success(`${filteredNewsletterSubscribers.length} ta obunachiga xabar muvaffaqiyatli yuborildi!`);
       setShowNewsletterForm(false);
       setNewsletterForm({ subject: '', content: '' });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error sending newsletter:", error);
-      toast.error("Xabar yuborishda xatolik yuz berdi");
+      toast.error(error.message || "Xabar yuborishda xatolik yuz berdi");
     } finally {
       setFormLoading(false);
     }
