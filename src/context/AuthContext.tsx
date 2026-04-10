@@ -126,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             createdAt,
             lastSeenNotificationAt,
             isProfileComplete,
-            newsletterSoundEnabled: doc.data().newsletterSoundEnabled ?? true
+            newsletterSoundEnabled: doc.exists() ? (doc.data()?.newsletterSoundEnabled ?? true) : true
           });
           setLoading(false);
         }, (error) => {
