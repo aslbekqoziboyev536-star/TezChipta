@@ -56,6 +56,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.21",
+    "firebase-tools": "^15.14.0",
     "tailwindcss": "^4.1.14",
     "typescript": "~5.8.2"
   }
