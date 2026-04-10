@@ -2,10 +2,6 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
-import { registerSW } from 'virtual:pwa-register';
-
-// Register PWA service worker
-registerSW({ immediate: true });
 
 // Suppress benign Vite/WebSocket errors in the AI Studio environment
 if (typeof window !== 'undefined') {
