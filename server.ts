@@ -1331,8 +1331,40 @@ async function startServer() {
     const distPath = path.join(process.cwd(), 'dist');
     const publicPath = path.join(process.cwd(), 'public');
     
+    console.log("Current working directory:", process.cwd());
     console.log("Serving static files from:", distPath);
     console.log("Serving public files from:", publicPath);
+    console.log("dist exists:", fs.existsSync(distPath));
+    console.log("index.html exists:", fs.existsSync(path.join(distPath, 'index.html')));
+    console.log("assets folder exists:", fs.existsSync(path.join(distPath, 'assets')));
+    
+    // Add request logging for debugging
+    app.use((req, res, next) => {
+      const start = Date.now();
+      res.on('finish', () => {
+        const duration = Date.now() - start;
+        console.log(`${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
+      });
+      next();
+    });
+
+    // Middleware to set correct Content-Type headers for static files
+    app.use((req, res, next) => {
+      if (req.path.endsWith('.js')) {
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      } else if (req.path.endsWith('.css')) {
+        res.setHeader('Content-Type', 'text/css; charset=utf-8');
+      } else if (req.path.endsWith('.json')) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      } else if (req.path.endsWith('.svg')) {
+        res.setHeader('Content-Type', 'image/svg+xml');
+      } else if (req.path.endsWith('.woff2')) {
+        res.setHeader('Content-Type', 'font/woff2');
+      } else if (req.path.endsWith('.woff')) {
+        res.setHeader('Content-Type', 'font/woff');
+      }
+      next();
+    });
 
     // Serve public files first as they are source assets
     app.use(express.static(publicPath));
@@ -1366,13 +1398,35 @@ async function startServer() {
     });
 
     app.get('*', (req, res) => {
-      // Fallback to index.html in dist
+      // Don't serve index.html for static asset requests (those should 404)
+      const assetExtensions = ['.js', '.css', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.woff', '.woff2', '.ttf', '.eot', '.ico', '.map'];
+      const hasAssetExtension = assetExtensions.some(ext => req.path.endsWith(ext));
+      
+      if (hasAssetExtension) {
+        // Asset not found - log and return 404
+        console.warn(`Asset not found: ${req.path}`);
+        console.warn(`  Checked paths: ${distPath}, ${publicPath}`);
+        return res.status(404).set('Content-Type', 'text/plain').send('Asset not found');
+      }
+      
+      // For non-asset requests, serve index.html (SPA fallback for client-side routing)
       const indexPath = path.join(distPath, 'index.html');
+      console.log(`Serving SPA route for: ${req.path}`);
+      
       if (fs.existsSync(indexPath)) {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.sendFile(indexPath);
       } else {
         // If dist/index.html doesn't exist, try to serve from root (for development/misconfigured prod)
-        res.sendFile(path.join(__dirname, 'index.html'));
+        console.warn(`dist/index.html not found at ${indexPath}, falling back to root index.html`);
+        const rootIndexPath = path.join(__dirname, 'index.html');
+        if (fs.existsSync(rootIndexPath)) {
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.sendFile(rootIndexPath);
+        } else {
+          console.error(`No index.html found at ${rootIndexPath}`);
+          res.status(500).set('Content-Type', 'text/plain').send('Server Error: index.html not found');
+        }
       }
     });
   }
