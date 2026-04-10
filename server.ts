@@ -1463,6 +1463,36 @@ async function startServer() {
       }
     });
 
+    // Explicit route for robots.txt
+    app.get('/robots.txt', (req, res) => {
+      const robotsPath = path.join(publicPath, 'robots.txt');
+      const robotsDistPath = path.join(distPath, 'robots.txt');
+      
+      res.setHeader('Content-Type', 'text/plain');
+      if (fs.existsSync(robotsPath)) {
+        res.sendFile(robotsPath);
+      } else if (fs.existsSync(robotsDistPath)) {
+        res.sendFile(robotsDistPath);
+      } else {
+        res.status(404).send('Robots.txt not found');
+      }
+    });
+
+    // Explicit route for sitemap.xml
+    app.get('/sitemap.xml', (req, res) => {
+      const sitemapPath = path.join(publicPath, 'sitemap.xml');
+      const sitemapDistPath = path.join(distPath, 'sitemap.xml');
+      
+      res.setHeader('Content-Type', 'application/xml');
+      if (fs.existsSync(sitemapPath)) {
+        res.sendFile(sitemapPath);
+      } else if (fs.existsSync(sitemapDistPath)) {
+        res.sendFile(sitemapDistPath);
+      } else {
+        res.status(404).send('Sitemap not found');
+      }
+    });
+
     // Explicit route for logo.png just in case
     app.get('/logo.png', (req, res) => {
       const logoInPublic = path.join(publicPath, 'logo.png');
