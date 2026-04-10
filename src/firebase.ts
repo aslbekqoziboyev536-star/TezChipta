@@ -49,9 +49,9 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
       tenantId: auth.currentUser?.tenantId,
       providerInfo: auth.currentUser?.providerData.map(provider => ({
         providerId: provider.providerId,
-        displayName: provider.displayName,
+        displayName: null,
         email: provider.email,
-        photoUrl: provider.photoURL
+        photoUrl: null
       })) || []
     },
     operationType,

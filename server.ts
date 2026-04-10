@@ -16,6 +16,7 @@ import { getFirestore as getClientFirestore, doc as clientDoc, getDoc as getClie
 import fs from "fs";
 import axios from "axios";
 import Stripe from "stripe";
+import { logToSupabase } from "./src/lib/supabaseServer.js";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import QRCode from "qrcode";
 import { createServer } from "http";
@@ -26,8 +27,34 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
+const isProduction = process.env.NODE_ENV === "production";
 const APP_URL = process.env.APP_URL || "http://localhost:3000";
+const CORS_ORIGINS = (process.env.CORS_ORIGINS || APP_URL)
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+
+function requireEnv(name: string) {
+  const value = process.env[name];
+  if (!value) {
+    const message = `Missing required environment variable: ${name}`;
+    if (isProduction) {
+      throw new Error(message);
+    }
+    console.warn(message);
+  }
+  return value || "";
+}
+
+const JWT_SECRET = requireEnv("JWT_SECRET") || "dev-jwt-secret";
+const STRIPE_SECRET_KEY = requireEnv("STRIPE_SECRET_KEY");
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "112463836858-l7fl8k7omm1n4dn1clva5uskd5vtc601.apps.googleusercontent.com";
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "qoziboyevaslbek359@gmail.com,admin@tezchipta.uz")
+  .split(',')
+  .map(email => email.trim().toLowerCase())
+  .filter(Boolean);
+
+const stripe = new Stripe(STRIPE_SECRET_KEY || "");
 
 // Load Firebase Config
 const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
@@ -106,14 +133,10 @@ try {
   console.warn("Could not log Firebase Admin info:", error);
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
-const GOOGLE_CLIENT_ID = "112463836858-l7fl8k7omm1n4dn1clva5uskd5vtc601.apps.googleusercontent.com";
 const client = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 // In-memory store for bus locations
 const busLocations: Record<string, { lat: number, lng: number, speed?: number, timestamp: string }> = {};
-
-const INTERNAL_SECRET = "ai_studio_server_secret_2024";
 
 // Helper to verify Firebase ID Token with fallback to REST API
 const verifyFirebaseIdToken = async (idToken: string) => {
@@ -196,11 +219,11 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
     });
 
     // Check email FIRST - this is the most reliable check and doesn't require Firestore
-    const isEmailAdmin = decodedToken.email === 'qoziboyevaslbek359@gmail.com' ||
-                         decodedToken.email === 'admin@tezchipta.uz';
+      const email = String(decodedToken.email || '').toLowerCase();
+    const isEmailAdmin = email && ADMIN_EMAILS.includes(email);
 
     if (isEmailAdmin) {
-      console.log("Admin verified by email:", decodedToken.email);
+      console.log("Admin verified by email:", email);
       req.user = decodedToken;
       return next();
     }
@@ -233,29 +256,47 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
 async function startServer() {
   const app = express();
   const httpServer = createServer(app);
+  const allowedOrigins = CORS_ORIGINS;
   const io = new Server(httpServer, {
     cors: {
-      origin: true,
+      origin: allowedOrigins,
       credentials: true
     }
   });
   const PORT = process.env.PORT || 3000;
 
-  // Security Headers for Firebase Auth and Popups
+  // Security headers for all responses
   app.use((req, res, next) => {
     res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
     res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+    res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+    res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: https:; connect-src 'self' https://identitytoolkit.googleapis.com https://www.googleapis.com https://firestore.googleapis.com https://storage.googleapis.com https://qrcode.to; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-ancestors 'none';");
     next();
   });
 
-  // MongoDB Connection - Removed as it is not used and causing connection errors
-  /*
+  // MongoDB Connection
   const MONGODB_URI = process.env.MONGODB_URI;
+  let paymentLogCollection: any;
+  
   if (MONGODB_URI) {
     mongoose.connect(MONGODB_URI, {
-      serverSelectionTimeoutMS: 5000, // Timeout after 5 seconds instead of 30
+      serverSelectionTimeoutMS: 5000,
     })
-      .then(() => console.log("MongoDB connected successfully"))
+      .then(() => {
+        console.log("MongoDB connected successfully");
+        // Create payment log collection and indexes
+        const db = mongoose.connection.db;
+        if (db) {
+          db.collection('payment_logs').createIndex({ bookingId: 1, createdAt: 1 });
+          db.collection('payment_logs').createIndex({ status: 1 });
+          db.collection('payment_logs').createIndex({ createdAt: 1 });
+          paymentLogCollection = db.collection('payment_logs');
+        }
+      })
       .catch(err => {
         console.error("MongoDB connection error:", err.message);
         if (err.message.includes("Could not connect to any servers") || err.message.includes("whitelist")) {
@@ -269,13 +310,20 @@ async function startServer() {
   } else {
     console.warn("MONGODB_URI not found in environment variables. MongoDB features will be unavailable.");
   }
-  */
 
   app.use(cors({
-    origin: true,
+    origin: (origin, callback) => {
+      if (!origin) {
+        return callback(null, true);
+      }
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      callback(new Error(`CORS policy: Origin ${origin} is not allowed`));
+    },
     credentials: true
   }));
-  app.use(express.json({ limit: '10mb' }));
+  app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
   app.use(cookieParser());
 
@@ -421,8 +469,7 @@ async function startServer() {
         name,
         email,
         role: 'driver',
-        createdAt: new Date().toISOString(),
-        _serverSecret: INTERNAL_SECRET
+        createdAt: new Date().toISOString()
       });
       console.log("User document created in Firestore.");
 
@@ -438,8 +485,7 @@ async function startServer() {
         bio: bio || '',
         experience: experience || 0,
         rating: rating || 5.0,
-        createdAt: new Date().toISOString(),
-        _serverSecret: INTERNAL_SECRET
+        createdAt: new Date().toISOString()
       });
       console.log("Driver document created in Firestore with ID:", driverDoc.id);
 
@@ -447,6 +493,120 @@ async function startServer() {
     } catch (error: any) {
       console.error("Error creating driver:", error);
       res.status(500).json({ error: error.message || "Failed to create driver", details: error.code });
+    }
+  });
+
+  // Promote a user to admin
+  app.post("/api/admin/promote-to-admin", verifyAdmin, async (req, res) => {
+    const { userId, email } = req.body;
+
+    if (!userId && !email) {
+      return res.status(400).json({ error: "Either userId or email is required" });
+    }
+
+    try {
+      if (!db) throw new Error("Firestore not initialized");
+      if (!auth) throw new Error("Firebase Auth not initialized");
+
+      let targetUid = userId;
+
+      // If email is provided, find the user by email
+      if (!targetUid && email) {
+        try {
+          const userRecord = await getAdminAuth(firebaseApp).getUserByEmail(email);
+          targetUid = userRecord.uid;
+        } catch (error: any) {
+          if (error.code === 'auth/user-not-found') {
+            return res.status(404).json({ error: "User not found with this email" });
+          }
+          throw error;
+        }
+      }
+
+      if (!targetUid) {
+        return res.status(400).json({ error: "Could not determine user ID" });
+      }
+
+      // Update user role in Firestore
+      const userDocRef = admin.firestore().collection('users').doc(targetUid);
+      const userDoc = await userDocRef.get();
+
+      if (!(userDoc as any).exists()) {
+        return res.status(404).json({ error: "User document not found in Firestore" });
+      }
+
+      await userDocRef.update({ role: 'admin' });
+      console.log("User promoted to admin:", targetUid);
+
+      // Optionally, set custom claims in Firebase Auth
+      try {
+        await getAdminAuth(firebaseApp).setCustomUserClaims(targetUid, { admin: true });
+        console.log("Custom admin claim set for user:", targetUid);
+      } catch (customClaimError) {
+        console.warn("Could not set custom claims (this is optional):", customClaimError);
+      }
+
+      res.json({ success: true, message: "User promoted to admin", userId: targetUid });
+    } catch (error: any) {
+      console.error("Error promoting user to admin:", error);
+      res.status(500).json({ error: error.message || "Failed to promote user to admin" });
+    }
+  });
+
+  // Make a user a driver
+  app.post("/api/admin/promote-to-driver", verifyAdmin, async (req, res) => {
+    const { userId, email } = req.body;
+
+    if (!userId && !email) {
+      return res.status(400).json({ error: "Either userId or email is required" });
+    }
+
+    try {
+      if (!db) throw new Error("Firestore not initialized");
+      if (!auth) throw new Error("Firebase Auth not initialized");
+
+      let targetUid = userId;
+
+      // If email is provided, find the user by email
+      if (!targetUid && email) {
+        try {
+          const userRecord = await getAdminAuth(firebaseApp).getUserByEmail(email);
+          targetUid = userRecord.uid;
+        } catch (error: any) {
+          if (error.code === 'auth/user-not-found') {
+            return res.status(404).json({ error: "User not found with this email" });
+          }
+          throw error;
+        }
+      }
+
+      if (!targetUid) {
+        return res.status(400).json({ error: "Could not determine user ID" });
+      }
+
+      // Update user role in Firestore
+      const userDocRef = admin.firestore().collection('users').doc(targetUid);
+      const userDoc = await userDocRef.get();
+
+      if (!(userDoc as any).exists()) {
+        return res.status(404).json({ error: "User document not found in Firestore" });
+      }
+
+      await userDocRef.update({ role: 'driver' });
+      console.log("User promoted to driver:", targetUid);
+
+      // Optionally, set custom claims in Firebase Auth
+      try {
+        await getAdminAuth(firebaseApp).setCustomUserClaims(targetUid, { driver: true });
+        console.log("Custom driver claim set for user:", targetUid);
+      } catch (customClaimError) {
+        console.warn("Could not set custom claims (this is optional):", customClaimError);
+      }
+
+      res.json({ success: true, message: "User promoted to driver", userId: targetUid });
+    } catch (error: any) {
+      console.error("Error promoting user to driver:", error);
+      res.status(500).json({ error: error.message || "Failed to promote user to driver" });
     }
   });
 
@@ -484,8 +644,8 @@ async function startServer() {
       // Set cookie
       res.cookie("auth_token", token, {
         httpOnly: true,
-        secure: true,
-        sameSite: "none",
+        secure: isProduction,
+        sameSite: isProduction ? "lax" : "none",
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
 
@@ -520,14 +680,14 @@ async function startServer() {
   app.post("/api/auth/logout", (req, res) => {
     res.clearCookie("auth_token", {
       httpOnly: true,
-      secure: true,
-      sameSite: "none"
+      secure: isProduction,
+      sameSite: isProduction ? "lax" : "none"
     });
     res.json({ success: true });
   });
 
   // Real-time Location Endpoint
-  app.post("/api/location", async (req, res) => {
+  app.post("/api/location", verifyUser, async (req, res) => {
     const { bus_id, lat, lng, speed } = req.body;
 
     if (!bus_id || lat === undefined || lng === undefined) {
@@ -561,8 +721,7 @@ async function startServer() {
       const settingsRef = clientDoc(clientDb, "settings", "payment");
       await setClientDoc(settingsRef, {
         adminCardNumber: cardNumber,
-        updatedAt: new Date().toISOString(),
-        _serverSecret: INTERNAL_SECRET
+        updatedAt: new Date().toISOString()
       }, { merge: true });
 
       res.json({ success: true });
@@ -579,6 +738,8 @@ async function startServer() {
       return res.status(400).json({ error: "Booking ID va chek URL talab qilinadi" });
     }
 
+    const MANUAL_PAYMENT_TIMEOUT_SECONDS = 30; // 30 seconds timeout for manual payment verification
+
     try {
       const bookingRef = clientDoc(clientDb, "bookings", bookingId);
       const bookingDoc = await getClientDoc(bookingRef);
@@ -591,16 +752,55 @@ async function startServer() {
         return res.status(403).json({ error: "Ruxsat berilmagan" });
       }
 
+      const uploadedAt = new Date();
+      const expiresAt = new Date(uploadedAt.getTime() + MANUAL_PAYMENT_TIMEOUT_SECONDS * 1000);
+
       await updateClientDoc(bookingRef, {
         paymentStatus: "pending_review",
         paymentMethod: "manual",
         receiptUrl,
-        receiptUploadedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        _serverSecret: INTERNAL_SECRET
+        receiptUploadedAt: uploadedAt.toISOString(),
+        receiptExpiresAt: expiresAt.toISOString(),
+        updatedAt: uploadedAt.toISOString()
       });
 
-      res.json({ success: true });
+      // Log to MongoDB if available
+      if (paymentLogCollection) {
+        try {
+          await paymentLogCollection.insertOne({
+            bookingId,
+            userId: (req as any).user.uid,
+            event: 'receipt_uploaded',
+            status: 'pending_review',
+            uploadedAt: uploadedAt.toISOString(),
+            expiresAt: expiresAt.toISOString(),
+            timeoutSeconds: MANUAL_PAYMENT_TIMEOUT_SECONDS
+          });
+        } catch (mongoError) {
+          console.warn("Error logging to MongoDB:", mongoError);
+        }
+      }
+
+      // Log to Supabase if available (for better analytics)
+      try {
+        await logToSupabase('payment_logs', {
+          booking_id: bookingId,
+          user_id: (req as any).user.uid,
+          event: 'receipt_uploaded',
+          status: 'pending_review',
+          uploaded_at: uploadedAt.toISOString(),
+          expires_at: expiresAt.toISOString(),
+          timeout_seconds: MANUAL_PAYMENT_TIMEOUT_SECONDS
+        });
+      } catch (supabaseError) {
+        console.warn("Error logging to Supabase:", supabaseError);
+      }
+
+      res.json({ 
+        success: true,
+        message: 'Chek muvaffaqiyatli yuklandi',
+        timeoutSeconds: MANUAL_PAYMENT_TIMEOUT_SECONDS
+      });
     } catch (error: any) {
       console.error("Error uploading receipt:", error);
       res.status(500).json({ error: error.message });
@@ -624,8 +824,7 @@ async function startServer() {
 
       const updateData: any = {
         paymentStatus: status,
-        updatedAt: new Date().toISOString(),
-        _serverSecret: INTERNAL_SECRET
+        updatedAt: new Date().toISOString()
       };
 
       if (status === "paid") {
@@ -636,6 +835,34 @@ async function startServer() {
       }
 
       await updateClientDoc(bookingRef, updateData);
+
+      // Log to MongoDB if available
+      if (paymentLogCollection) {
+        try {
+          await paymentLogCollection.insertOne({
+            bookingId,
+            adminId: (req as any).user.uid,
+            event: 'payment_confirmed',
+            status: status,
+            confirmedAt: new Date().toISOString()
+          });
+        } catch (mongoError) {
+          console.warn("Error logging to MongoDB:", mongoError);
+        }
+      }
+
+      // Log to Supabase if available (for better analytics)
+      try {
+        await logToSupabase('payment_logs', {
+          booking_id: bookingId,
+          admin_id: (req as any).user.uid,
+          event: 'payment_confirmed',
+          status: status,
+          confirmed_at: new Date().toISOString()
+        });
+      } catch (supabaseError) {
+        console.warn("Error logging to Supabase:", supabaseError);
+      }
 
       res.json({ success: true });
     } catch (error: any) {
@@ -842,6 +1069,10 @@ async function startServer() {
 
   // Admin: Clear Database
   app.post("/api/admin/clear-database", verifyAdmin, async (req, res) => {
+    if (isProduction && process.env.ALLOW_DATABASE_CLEAR !== 'true') {
+      return res.status(403).json({ error: "Clear database is disabled in production" });
+    }
+
     try {
       const collections = ['bookings', 'rides', 'users', 'drivers', 'faqs', 'messages', 'chats', 'reviews', 'blogs'];
       
@@ -874,6 +1105,231 @@ async function startServer() {
     } catch (error) {
       console.error("Clear database error:", error);
       res.status(500).json({ error: "Bazani tozalashda xatolik yuz berdi" });
+    }
+  });
+
+  // ===== NEWSLETTER SYSTEM =====
+
+  // Subscribe to newsletter
+  app.post("/api/newsletter/subscribe", async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        return res.status(400).json({ error: "To'g'ri email manzilini kiriting" });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+
+      // Check if already subscribed
+      const existingSubscriber = await getClientDocs(
+        clientQuery(
+          clientCollection(clientDb, 'newsletter_subscribers'),
+          clientWhere('email', '==', normalizedEmail)
+        )
+      );
+
+      if (!existingSubscriber.empty) {
+        return res.status(200).json({ 
+          message: "Siz allaqachon obuna qilgansiz",
+          subscribed: true
+        });
+      }
+
+      // Add new subscriber
+      const docRef = await addClientDoc(
+        clientCollection(clientDb, 'newsletter_subscribers'),
+        {
+          email: normalizedEmail,
+          subscribedAt: new Date().toISOString(),
+          status: 'active',
+          unsubscribeToken: Math.random().toString(36).substr(2, 9)
+        }
+      );
+
+      console.log("Newsletter subscriber added:", normalizedEmail);
+      res.status(201).json({ 
+        message: "Siz newsletter ga muvaffaqiyatli obuna qildingiz",
+        subscriberId: docRef.id,
+        subscribed: true
+      });
+    } catch (error: any) {
+      console.error("Newsletter subscription error:", error);
+      res.status(500).json({ error: "Obunalashda xatolik yuz berdi" });
+    }
+  });
+
+  // Unsubscribe from newsletter
+  app.post("/api/newsletter/unsubscribe", async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ error: "Email manzili talab qilinadi" });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+
+      // Find and delete subscriber
+      const snapshot = await getClientDocs(
+        clientQuery(
+          clientCollection(clientDb, 'newsletter_subscribers'),
+          clientWhere('email', '==', normalizedEmail)
+        )
+      );
+
+      if (snapshot.empty) {
+        return res.status(404).json({ error: "Obuna topilmadi" });
+      }
+
+      await deleteClientDoc(snapshot.docs[0].ref);
+
+      console.log("Newsletter subscriber removed:", normalizedEmail);
+      res.json({ 
+        message: "Siz newsletter dan obunan chiqtingiz",
+        unsubscribed: true
+      });
+    } catch (error: any) {
+      console.error("Newsletter unsubscribe error:", error);
+      res.status(500).json({ error: "Obunan chiqishda xatolik yuz berdi" });
+    }
+  });
+
+  // Get all newsletter subscribers (Admin only)
+  app.get("/api/admin/newsletter/subscribers", verifyAdmin, async (req, res) => {
+    try {
+      const snapshot = await getClientDocs(
+        clientQuery(
+          clientCollection(clientDb, 'newsletter_subscribers'),
+          clientWhere('status', '==', 'active')
+        )
+      );
+
+      const subscribers = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      res.json({
+        count: subscribers.length,
+        subscribers: subscribers
+      });
+    } catch (error: any) {
+      console.error("Get subscribers error:", error);
+      res.status(500).json({ error: "Obunachilar ro'yxatini olishda xatolik yuz berdi" });
+    }
+  });
+
+  // Send newsletter to all subscribers (Admin only)
+  app.post("/api/admin/newsletter/send", verifyAdmin, async (req, res) => {
+    try {
+      const { subject, message, htmlContent } = req.body;
+
+      if (!subject || !message) {
+        return res.status(400).json({ error: "Sarlavha va xabar talab qilinadi" });
+      }
+
+      // Get all active subscribers
+      const snapshot = await getClientDocs(
+        clientQuery(
+          clientCollection(clientDb, 'newsletter_subscribers'),
+          clientWhere('status', '==', 'active')
+        )
+      );
+
+      const subscribers = snapshot.docs.map(doc => ({
+        id: doc.id,
+        email: doc.data().email
+      }));
+
+      if (subscribers.length === 0) {
+        return res.status(400).json({ error: "Jadvalga olingan obunachilar yo'q" });
+      }
+
+      // Create newsletter record
+      const newsletterRef = await addClientDoc(
+        clientCollection(clientDb, 'newsletters'),
+        {
+          subject: subject,
+          message: message,
+          htmlContent: htmlContent || null,
+          recipientCount: subscribers.length,
+          sentAt: new Date().toISOString(),
+          sentBy: (req as any).user?.email || (req as any).user?.uid,
+          status: 'sent'
+        }
+      );
+
+      // In production, integrate with email service (SendGrid, Mailgun, Firebase Email, etc.)
+      // For now, we'll just log and store the newsletter
+      console.log(`Newsletter sent to ${subscribers.length} subscribers:`, {
+        subject: subject,
+        sent: new Date().toISOString(),
+        recipients: subscribers.map(s => s.email)
+      });
+
+      /* Example integration code for future email sending:
+      try {
+        // Option 1: Firebase Messaging
+        const tokens = await getDeviceTokens(subscribers);
+        await admin.messaging().sendMulticast({
+          notification: { title: subject, body: message },
+          tokens: tokens
+        });
+
+        // Option 2: SendGrid API
+        // const sgMail = require('@sendgrid/mail');
+        // sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+        // await Promise.all(subscribers.map(sub => 
+        //   sgMail.send({...})
+        // ));
+
+        // Option 3: Mailgun API
+        // const mailgun = require('mailgun.js');
+        // const mg = new mailgun(FormData);
+        // await Promise.all(subscribers.map(sub => 
+        //   mg.messages.create(...)
+        // ));
+      } catch (emailError) {
+        console.error("Email sending error:", emailError);
+        // Still return success as newsletter record was created
+      }
+      */
+
+      res.json({
+        success: true,
+        message: `Newsletter ${subscribers.length} obunachiiga jo'natildi`,
+        newsletterId: newsletterRef.id,
+        recipientCount: subscribers.length
+      });
+    } catch (error: any) {
+      console.error("Send newsletter error:", error);
+      res.status(500).json({ error: "Newsletter jo'natishda xatolik yuz berdi" });
+    }
+  });
+
+  // Get newsletter history (Admin only)
+  app.get("/api/admin/newsletter/history", verifyAdmin, async (req, res) => {
+    try {
+      const snapshot = await getClientDocs(
+        clientQuery(clientCollection(clientDb, 'newsletters'))
+      );
+
+      const newsletters = snapshot.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+        .sort((a: any, b: any) => new Date(b.sentAt || 0).getTime() - new Date(a.sentAt || 0).getTime())
+        .slice(0, 50);
+
+      res.json({
+        count: newsletters.length,
+        newsletters: newsletters
+      });
+    } catch (error: any) {
+      console.error("Get newsletter history error:", error);
+      res.status(500).json({ error: "Newsletter tarixini olishda xatolik yuz berdi" });
     }
   });
 

@@ -1,7 +1,7 @@
 import { useSettings } from '../context/SettingsContext';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Search, Tag, Calendar, User as UserIcon, ArrowRight, X, Image as ImageIcon, Newspaper, Bus, Filter } from 'lucide-react';
+import { Plus, Search, Tag, Calendar, User as UserIcon, ArrowRight, X, Image as ImageIcon, Newspaper, Bus, Filter, Globe, Check } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
@@ -33,8 +33,15 @@ export default function Blog() {
   const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [formLoading, setFormLoading] = useState(false);
-  const { t } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
   const [selectedPost, setSelectedPost] = useState<BlogPost | null>(null);
+  const [showLangMenu, setShowLangMenu] = useState(false);
+
+  const languages = [
+    { code: 'uz', label: t('lang.uz'), flag: '🇺🇿' },
+    { code: 'ru', label: t('lang.ru'), flag: '🇷🇺' },
+    { code: 'en', label: t('lang.en'), flag: '🇬🇧' },
+  ] as const;
 
   const [formData, setFormData] = useState({
     title: '',
@@ -123,6 +130,43 @@ export default function Blog() {
             </Link>
           </div>
           <div className="flex items-center space-x-4">
+            <div className="relative">
+              <Button
+                variant="ghost"
+                onClick={() => setShowLangMenu(!showLangMenu)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-full border-0 h-auto relative"
+                leftIcon={<Globe className="w-5 h-5 text-emerald-500" />}
+              />
+              <AnimatePresence>
+                {showLangMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: -10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: -10 }}
+                    className="absolute top-full right-0 mt-2 bg-white dark:bg-[#111827] border border-gray-200 dark:border-white/5 rounded-2xl shadow-lg overflow-hidden z-50"
+                  >
+                    {languages.map((lang) => (
+                      <button
+                        key={lang.code}
+                        onClick={() => {
+                          setLanguage(lang.code);
+                          setShowLangMenu(false);
+                        }}
+                        className={`w-full px-4 py-3 flex items-center gap-3 transition-colors ${
+                          language === lang.code
+                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5'
+                        }`}
+                      >
+                        <span className="text-lg">{lang.flag}</span>
+                        <span className="font-medium">{lang.label}</span>
+                        {language === lang.code && <Check className="w-4 h-4 ml-auto" />}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
             <ThemeToggle />
             {canWrite && (
               <Button

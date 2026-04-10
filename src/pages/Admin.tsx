@@ -646,16 +646,52 @@ export default function Admin() {
 
   const handleUpdateUserRole = async (userId: string, newRole: string) => {
     try {
-      try {
-        await updateDoc(doc(db, 'users', userId), { role: newRole });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) {
+        setError("No authentication token");
         return;
       }
+
+      const endpoint = newRole === 'admin' 
+        ? '/api/admin/promote-to-admin'
+        : newRole === 'driver'
+        ? '/api/admin/promote-to-driver'
+        : null;
+
+      if (!endpoint) {
+        // For regular user role, update directly in Firestore
+        try {
+          await updateDoc(doc(db, 'users', userId), { role: newRole });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
+          return;
+        }
+        setUsersList(usersList.map(u => u.id === userId ? { ...u, role: newRole } : u));
+        return;
+      }
+
+      // Use server endpoint for admin and driver roles
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ userId })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to update user role");
+      }
+
+      const result = await response.json();
       setUsersList(usersList.map(u => u.id === userId ? { ...u, role: newRole } : u));
+      toast.success(`Foydalanuvchi ${newRole === 'admin' ? 'admin' : 'haydovchi'} qilib belgilandi`);
     } catch (error) {
       console.error("Error updating user role:", error);
-      setError("An error occurred while changing user role");
+      setError(error instanceof Error ? error.message : "An error occurred while changing user role");
+      toast.error("Rol o'zgartirilmadi. Qayta urinib ko'ring.");
     }
   };
 

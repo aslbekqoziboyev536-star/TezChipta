@@ -1,0 +1,400 @@
+<!-- 
+  Newsletter System - HTML Email Template Examples
+  Bu faylda newsletter jo'natish uchun HTML shablonlarini topasiz.
+-->
+
+<!-- Simple Text Newsletter Template -->
+<template id="simple-newsletter">
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background-color: #f5f5f5;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .header {
+      text-align: center;
+      border-bottom: 3px solid #007bff;
+      padding-bottom: 20px;
+      margin-bottom: 30px;
+    }
+    .header h1 {
+      color: #007bff;
+      margin: 0;
+    }
+    .content {
+      color: #555;
+      line-height: 1.8;
+    }
+    .content h2 {
+      color: #333;
+      margin-top: 20px;
+    }
+    .cta {
+      display: inline-block;
+      background-color: #007bff;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 5px;
+      text-decoration: none;
+      margin: 20px 0;
+      font-weight: bold;
+    }
+    .cta:hover {
+      background-color: #0056b3;
+    }
+    .footer {
+      text-align: center;
+      border-top: 1px solid #ddd;
+      margin-top: 30px;
+      padding-top: 20px;
+      font-size: 12px;
+      color: #888;
+    }
+    .unsubscribe {
+      margin-top: 10px;
+      font-size: 11px;
+    }
+    .unsubscribe a {
+      color: #007bff;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>TezChipta Newsletter</h1>
+    </div>
+    
+    <div class="content">
+      <p>Salom,</p>
+      
+      <h2>Yangi yangilanishlar</h2>
+      <p>
+        Biz yangi xususiyatlarni qo'shdik va foydalanuvchi tajribani yaxshiladdik. 
+        Eng so'nggi yangilandiklarni tekshirib ko'ring.
+      </p>
+      
+      <a href="https://tezchipta.uz" class="cta">Batafsil bilish</a>
+      
+      <h2>Sizning uchun maxsus taklif</h2>
+      <p>
+        Siz TezChipta-ning taqdirli foydalanocchisi. Maxsus diskontlar va foydalarga ega bo'ling.
+      </p>
+    </div>
+    
+    <div class="footer">
+      <p>© 2026 TezChipta. Barcha huquqlar himoyalangan.</p>
+      <p>TezChipta, Tashkent, O'zbekiston</p>
+      <div class="unsubscribe">
+        Bu erdan <a href="https://tezchipta.uz/newsletter/unsubscribe">obunan chiqing</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+</template>
+
+<!-- Promotional Newsletter Template -->
+<template id="promo-newsletter">
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #f0f0f0;
+      color: #333;
+    }
+    .wrapper {
+      background-color: white;
+      max-width: 600px;
+      margin: 20px auto;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .banner {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 40px 20px;
+      text-align: center;
+    }
+    .banner h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+    .banner p {
+      font-size: 16px;
+      opacity: 0.9;
+    }
+    .content {
+      padding: 40px 20px;
+    }
+    .content h2 {
+      color: #667eea;
+      margin-bottom: 15px;
+      font-size: 22px;
+    }
+    .offer-section {
+      background-color: #f9f9f9;
+      padding: 20px;
+      border-radius: 5px;
+      margin: 20px 0;
+      border-left: 4px solid #667eea;
+    }
+    .offer-section h3 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+    .button {
+      display: inline-block;
+      background-color: #667eea;
+      color: white;
+      padding: 15px 30px;
+      text-decoration: none;
+      border-radius: 5px;
+      margin: 20px 0;
+      font-weight: bold;
+      transition: background-color 0.3s;
+    }
+    .button:hover {
+      background-color: #764ba2;
+    }
+    .footer {
+      background-color: #f5f5f5;
+      padding: 20px;
+      text-align: center;
+      font-size: 12px;
+      color: #999;
+      border-top: 1px solid #ddd;
+    }
+    .social-links {
+      margin: 10px 0;
+    }
+    .social-links a {
+      display: inline-block;
+      margin: 0 5px;
+      color: #667eea;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="banner">
+      <h1>🎉 Maxsus Taklif</h1>
+      <p>Faqat sizning uchun eksklyuziv diskont!</p>
+    </div>
+    
+    <div class="content">
+      <h2>Salom,</h2>
+      <p>
+        Biz bilmaydik, lekin sizga sochiqli ta'minot haqida xabar berish istamiz. 
+        Bu hafta sizning sevimli sayohatlarida 20% gacha chegirma oling!
+      </p>
+      
+      <div class="offer-section">
+        <h3>20% Chegirma</h3>
+        <p>
+          "SUMMER20" kod yordamida barcha javorlar uchun 20% chegirma oling. 
+          Bu taklif faqat 3 kun uchun amal qiladi.
+        </p>
+        <a href="https://tezchipta.uz/book" class="button">Bugun bron qiling</a>
+      </div>
+      
+      <div class="offer-section">
+        <h3>Bonus Puan</h3>
+        <p>
+          Eng yaqin 5 ta safar uchun har bir qo'shimcha 10% bonus puan oling.
+        </p>
+      </div>
+      
+      <p>
+        <strong>Shartlar:</strong> Bu taklif yangi va mavjud foydalanuvchilarga tarqatiladi. 
+        Batafsil shutnomani sahifamizda ko'rib chiqing.
+      </p>
+    </div>
+    
+    <div class="footer">
+      <p>© 2026 TezChipta. Barcha huquqlar himoyalangan.</p>
+      <div class="social-links">
+        <a href="https://facebook.com/tezchipta">Facebook</a> | 
+        <a href="https://instagram.com/tezchipta">Instagram</a> | 
+        <a href="https://twitter.com/tezchipta">Twitter</a>
+      </div>
+      <p style="margin-top: 10px;">
+        Bu erdan <a href="https://tezchipta.uz/newsletter/unsubscribe" style="color: #667eea;">obunan chiqing</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+</template>
+
+<!-- Announcement Newsletter Template -->
+<template id="announcement-newsletter">
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #ecf0f1;
+      margin: 0;
+      padding: 0;
+    }
+    .main-wrapper {
+      max-width: 600px;
+      margin: 20px auto;
+      background-color: white;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid #bdc3c7;
+    }
+    .header-section {
+      background-color: #2c3e50;
+      color: white;
+      padding: 30px 20px;
+      text-align: center;
+    }
+    .header-section h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+    .icon {
+      font-size: 40px;
+      margin-bottom: 10px;
+    }
+    .body-section {
+      padding: 30px 20px;
+    }
+    .announcement {
+      background-color: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .announcement-title {
+      color: #856404;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    .highlight {
+      background-color: #e8f4f8;
+      padding: 15px;
+      border-radius: 4px;
+      margin: 20px 0;
+      color: #0c5460;
+    }
+    .action-button {
+      display: inline-block;
+      background-color: #2c3e50;
+      color: white;
+      padding: 12px 24px;
+      text-decoration: none;
+      border-radius: 4px;
+      margin: 15px 0;
+      font-weight: bold;
+    }
+    .action-button:hover {
+      background-color: #1a252f;
+    }
+    .footer-section {
+      background-color: #f8f9fa;
+      padding: 20px;
+      border-top: 1px solid #dee2e6;
+      text-align: center;
+      font-size: 12px;
+      color: #6c757d;
+    }
+    .divider {
+      border-top: 1px solid #dee2e6;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="main-wrapper">
+    <div class="header-section">
+      <div class="icon">📢</div>
+      <h1>Muhim Xabar</h1>
+    </div>
+    
+    <div class="body-section">
+      <p>Salom,</p>
+      
+      <p>
+        Biz muhim yangiliklari sizga o'tkazishni xohlaydik:
+      </p>
+      
+      <div class="announcement">
+        <div class="announcement-title">✨ Yangi Xususiyat: Real-time Sledlash</div>
+        <p>
+          Endi avtobusni real vaqt rejimida ko'rib olasiz! "Mening safar" bo'limida 
+          haydovchining joylashuvini live xarita'da kuzatasiz.
+        </p>
+      </div>
+      
+      <div class="highlight">
+        <p>
+          <strong>Qachon:</strong> 15-aprel, 2026
+        </p>
+        <p>
+          <strong>Nima o'zgaradi:</strong> Barcha yangi booking-lar uchun real-time sledlash avtomatik ravishda faol bo'ladi.
+        </p>
+      </div>
+      
+      <p>
+        Agar sizda savollar bo'lsa, <a href="https://tezchipta.uz/faq">FAQ</a> sahifamizni 
+        ko'ring yoki <a href="https://tezchipta.uz/support">bizga murojaat qiling</a>.
+      </p>
+      
+      <a href="https://tezchipta.uz" class="action-button">Batafsil</a>
+      
+      <div class="divider"></div>
+      
+      <p style="font-size: 12px; color: #6c757d;">
+        TezChipta-da safar qilayotganingiz uchun rahmat!
+      </p>
+    </div>
+    
+    <div class="footer-section">
+      <p>© 2026 TezChipta | Xavfsiz va Qulay Sayohat</p>
+      <p>
+        <a href="https://tezchipta.uz"  style="color: #2c3e50; text-decoration: none;">Website</a> | 
+        <a href="https://tezchipta.uz/privacy" style="color: #2c3e50; text-decoration: none;">Maxfiylik</a> | 
+        <a href="https://tezchipta.uz/terms" style="color: #2c3e50; text-decoration: none;">Shartlar</a>
+      </p>
+      <p style="margin-top: 10px;">
+        <a href="https://tezchipta.uz/newsletter/unsubscribe" style="color: #2c3e50;">Obunan chiqish</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+</template>

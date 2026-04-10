@@ -7,7 +7,6 @@ import { NotificationPopup } from './NotificationPopup';
 export function NotificationListener() {
     const { user } = useAuth();
     const [activeNotification, setActiveNotification] = useState<any>(null);
-    const seenNotifIds = React.useRef<Set<string>>(new Set());
 
     useEffect(() => {
         if (!user || user.role === 'admin') {
@@ -27,16 +26,14 @@ export function NotificationListener() {
             const candidates = snapshot.docs
                 .map(doc => ({ id: doc.id, ...doc.data() } as any))
                 .filter(notif => {
-                    // 1. Session check: Ignore if already seen in this session
-                    if (seenNotifIds.current.has(notif.id)) return false;
-
-                    // 2. Database check: Compare with user's last seen timestamp
+                    // Database check: Compare with user's last seen timestamp to prevent duplicate notifications
                     const notifTime = new Date(notif.createdAt).getTime();
                     const lastSeenTime = user.lastSeenNotificationAt ? new Date(user.lastSeenNotificationAt).getTime() : 0;
 
+                    // Only show notifications that are newer than the last seen timestamp
                     if (notifTime <= lastSeenTime) return false;
 
-                    // 3. Newcomer targeting logic
+                    // Newcomer targeting logic
                     if (notif.target === 'newcomers') {
                         const joinedDate = new Date(user.createdAt).getTime();
                         const twoDaysAgo = Date.now() - (2 * 24 * 60 * 60 * 1000);
@@ -52,10 +49,9 @@ export function NotificationListener() {
 
             if (candidates.length > 0) {
                 const latest = candidates[0];
+                // Only show if it's a new notification (not the one currently shown)
                 if (!activeNotification || activeNotification.id !== latest.id) {
                     setActiveNotification(latest);
-                    // Mark as seen in session immediately to avoid re-triggering
-                    seenNotifIds.current.add(latest.id);
                 }
             } else if (activeNotification && !snapshot.docs.some(d => d.id === activeNotification.id)) {
                 setActiveNotification(null);
@@ -71,8 +67,7 @@ export function NotificationListener() {
         const notifId = activeNotification.id;
         const createdAt = activeNotification.createdAt;
 
-        // Mark as seen in session immediately (Synchronous)
-        seenNotifIds.current.add(notifId);
+        // Clear the notification from UI immediately
         setActiveNotification(null);
 
         try {

@@ -88,7 +88,17 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() && (
         request.auth.token.email.lower() == "qoziboyevaslbek359@gmail.com" ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function isAdminOrInWhitelist() {
+      return isAuthenticated() && (
+        request.auth.token.email.lower() == "qoziboyevaslbek359@gmail.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        request.auth.token.email.lower() in ["admin@tezchipta.uz", "support@tezchipta.uz"]
       );
     }
 
@@ -281,51 +291,51 @@ service cloud.firestore {
 
     match /drivers/{driverId} {
       allow read: if true;
-      allow create: if isServer(request.resource.data) || (isAdmin() && isValidDriver(request.resource.data));
-      allow update: if isServer(request.resource.data) || (isAdmin() && isValidDriver(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdmin();
+      allow create: if isServer(request.resource.data) || (isAdminOrInWhitelist() && isValidDriver(request.resource.data));
+      allow update: if isServer(request.resource.data) || (isAdminOrInWhitelist() && isValidDriver(request.resource.data));
+      allow delete: if isServer(resource.data) || isAdminOrInWhitelist();
     }
 
     match /rides/{rideId} {
       allow read: if true;
-      allow create: if isServer(request.resource.data) || (isAdmin() && isValidRide(request.resource.data));
-      allow update: if isServer(request.resource.data) || (isAdmin() && isValidRide(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdmin();
+      allow create: if isServer(request.resource.data) || (isAdminOrInWhitelist() && isValidRide(request.resource.data));
+      allow update: if isServer(request.resource.data) || (isAdminOrInWhitelist() && isValidRide(request.resource.data));
+      allow delete: if isServer(resource.data) || isAdminOrInWhitelist();
     }
 
     match /faqs/{faqId} {
       allow read: if true;
-      allow create: if isServer(request.resource.data) || (isAdmin() && isValidFaq(request.resource.data));
-      allow update: if isServer(request.resource.data) || (isAdmin() && isValidFaq(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdmin();
+      allow create: if isServer(request.resource.data) || (isAdminOrInWhitelist() && isValidFaq(request.resource.data));
+      allow update: if isServer(request.resource.data) || (isAdminOrInWhitelist() && isValidFaq(request.resource.data));
+      allow delete: if isServer(resource.data) || isAdminOrInWhitelist();
     }
 
     match /users/{userId} {
       allow read: if true; // Allow public reads for role checks on server
-      allow create: if isServer(request.resource.data) || (isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == 'user' || request.auth.token.email == "qoziboyevaslbek359@gmail.com" || isAdmin()));
-      allow update: if isServer(request.resource.data) || (isAuthenticated() && (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin()));
-      allow delete: if isServer(resource.data) || isAdmin();
+      allow create: if isServer(request.resource.data) || (isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == 'user' || request.auth.token.email == "qoziboyevaslbek359@gmail.com" || isAdminOrInWhitelist()));
+      allow update: if isServer(request.resource.data) || (isAuthenticated() && (isOwner(userId) || isAdminOrInWhitelist()) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdminOrInWhitelist()));
+      allow delete: if isServer(resource.data) || isAdminOrInWhitelist();
     }
 
     match /bookings/{bookingId} {
       allow read: if true;
       allow create: if isServer(request.resource.data) || (isAuthenticated() && isValidBooking(request.resource.data));
-      allow update: if isServer(request.resource.data) || (isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidBooking(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdmin();
+      allow update: if isServer(request.resource.data) || (isAuthenticated() && (resource.data.userId == request.auth.uid || isAdminOrInWhitelist()) && isValidBooking(request.resource.data));
+      allow delete: if isServer(resource.data) || isAdminOrInWhitelist();
     }
 
     match /messages/{messageId} {
-      allow read: if isAdmin();
+      allow read: if isAdminOrInWhitelist();
       allow create: if isServer(request.resource.data) || isValidMessage(request.resource.data);
-      allow update: if isServer(request.resource.data) || (isAdmin() && isValidMessage(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdmin();
+      allow update: if isServer(request.resource.data) || (isAdminOrInWhitelist() && isValidMessage(request.resource.data));
+      allow delete: if isServer(resource.data) || isAdminOrInWhitelist();
     }
 
     match /newsletter_subscribers/{subscriberId} {
-      allow read: if isAdmin();
+      allow read: if isAdminOrInWhitelist();
       allow create: if isValidNewsletterSubscriber(request.resource.data);
-      allow update: if isAdmin() && isValidNewsletterSubscriber(request.resource.data);
-      allow delete: if isAdmin();
+      allow update: if isAdminOrInWhitelist() && isValidNewsletterSubscriber(request.resource.data);
+      allow delete: if isAdminOrInWhitelist();
     }
 
     match /chats/{chatId} {
@@ -342,9 +352,9 @@ service cloud.firestore {
 
     match /blogs/{blogId} {
       allow read: if true;
-      allow create: if isServer(request.resource.data) || (isAuthenticated() && (isAdmin() || isDriver()) && isValidBlog(request.resource.data));
-      allow update: if isServer(request.resource.data) || (isAuthenticated() && (isAdmin() || (isDriver() && resource.data.authorId == request.auth.uid)) && isValidBlog(request.resource.data));
-      allow delete: if isAdmin() || (isDriver() && resource.data.authorId == request.auth.uid);
+      allow create: if isServer(request.resource.data) || (isAuthenticated() && (isAdminOrInWhitelist() || isDriver()) && isValidBlog(request.resource.data));
+      allow update: if isServer(request.resource.data) || (isAuthenticated() && (isAdminOrInWhitelist() || (isDriver() && resource.data.authorId == request.auth.uid)) && isValidBlog(request.resource.data));
+      allow delete: if isAdminOrInWhitelist() || (isDriver() && resource.data.authorId == request.auth.uid);
     }
 
     match /settings/payment {
