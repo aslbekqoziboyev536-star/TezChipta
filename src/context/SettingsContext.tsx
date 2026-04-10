@@ -12,7 +12,7 @@ interface SettingsContextType {
   siteDescription: string;
 }
 
-const defaultLogo = 'https://imagehosting-hulf.onrender.com/uploads/743d26dac03143284afd0f450db04d85.png';
+const defaultLogo = '/logo.png';
 
 const SettingsContext = createContext<SettingsContextType>({
   logoUrl: defaultLogo,
@@ -40,7 +40,8 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
     const unsubscribe = onSnapshot(doc(db, 'settings', 'payment'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        const newLogoUrl = data.logoUrl || defaultLogo;
+        // Force use local logo as requested
+        const newLogoUrl = defaultLogo;
         setSettings({
           logoUrl: newLogoUrl,
           adminCardNumber: data.adminCardNumber || '8600 0000 0000 0000',

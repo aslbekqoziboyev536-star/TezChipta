@@ -2610,21 +2610,18 @@ export default function Admin() {
 
                   {/* Other Settings */}
                   <div className="space-y-6">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Sayt Logotipi (URL)</label>
+                    <div className="space-y-2 opacity-60">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Sayt Logotipi (Lokal)</label>
                       <input
                         type="text"
-                        value={logoUrl}
-                        onChange={(e) => setLogoUrl(e.target.value)}
-                        placeholder="https://example.com/logo.png"
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                        value="/logo.png"
+                        disabled
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-[#0B1120] text-gray-500 cursor-not-allowed outline-none transition-all"
                       />
-                      <p className="text-xs text-gray-500 mt-1">Ushbu URL orqali saytdagi barcha logotiplar va favicon o'zgaradi.</p>
-                      {logoUrl && (
-                        <div className="mt-2 p-2 border border-gray-200 dark:border-white/10 rounded-lg inline-block bg-gray-50 dark:bg-[#0B1120]">
-                          <img src={logoUrl} alt="Logo Preview" className="h-10 object-contain" onError={(e) => (e.currentTarget.src = 'https://placehold.co/512x512/10b981/ffffff/png?text=Xato')} />
-                        </div>
-                      )}
+                      <p className="text-xs text-gray-500 mt-1">Hozirda tizim <code>public/logo.png</code> faylidan foydalanmoqda.</p>
+                      <div className="mt-2 p-2 border border-gray-200 dark:border-white/10 rounded-lg inline-block bg-gray-50 dark:bg-[#0B1120]">
+                          <img src="/logo.png" alt="Logo Preview" className="h-10 object-contain" />
+                      </div>
                     </div>
 
                     <div className="space-y-2">
