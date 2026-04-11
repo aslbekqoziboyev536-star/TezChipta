@@ -28,9 +28,11 @@ import { LoadingScreen } from '../components/LoadingScreen';
 import { Button } from '../components/ui/Button';
 import { GoogleGenAI } from "@google/genai";
 import ReactMarkdown from 'react-markdown';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function Statistics() {
   const { user, loading: authLoading } = useAuth();
+  const { t, language } = useLanguage();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<{
@@ -94,7 +96,9 @@ export default function Statistics() {
         - Total Rides: ${rides.length}
         - User growth: ${users.length} users registered.
         
-        Please provide a short, professional analysis in Uzbek about these statistics. 
+        Current Language: ${language === 'uz' ? 'Uzbek' : language === 'ru' ? 'Russian' : 'English'}
+        
+        Please provide a short, professional analysis in the specified language about these statistics. 
         Focus on growth and potential improvements. Keep it concise (2-3 sentences).
       `;
 
@@ -129,15 +133,15 @@ export default function Statistics() {
   }, [data.users]);
 
   const mostPurchasedTicket = useMemo(() => {
-    if (data.bookings.length === 0) return "Hali sotuv yo'q";
+    if (data.bookings.length === 0) return t('stats.no_data');
     const counts: { [key: string]: number } = {};
     data.bookings.forEach(b => {
       counts[b.rideId] = (counts[b.rideId] || 0) + 1;
     });
     const topRideId = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
     const topRide = data.rides.find(r => r.id === topRideId);
-    return topRide ? `${topRide.from} - ${topRide.to}` : "Hali sotuv yo'q";
-  }, [data.bookings, data.rides]);
+    return topRide ? `${topRide.from} - ${topRide.to}` : t('stats.no_data');
+  }, [data.bookings, data.rides, t]);
 
   if (loading || authLoading) return <LoadingScreen />;
 
@@ -155,7 +159,7 @@ export default function Statistics() {
           />
           <div className="flex items-center gap-2">
             <TrendingUp className="w-6 h-6 text-emerald-500" />
-            <h1 className="text-xl font-bold tracking-tight">Platforma Statistikasi</h1>
+            <h1 className="text-xl font-bold tracking-tight">{t('stats.title')}</h1>
           </div>
         </div>
         <ThemeToggle />
@@ -168,7 +172,7 @@ export default function Statistics() {
             <Ticket className="w-6 h-6 text-emerald-500" />
           </div>
           <div>
-            <p className="text-xs text-gray-400 font-medium mb-1">Eng ko'p sotib olingan chipta</p>
+            <p className="text-xs text-gray-400 font-medium mb-1">{t('stats.top_ticket')}</p>
             <h3 className="text-lg font-bold">{mostPurchasedTicket}</h3>
           </div>
         </div>
@@ -178,8 +182,8 @@ export default function Statistics() {
             <Clock className="w-6 h-6 text-amber-500" />
           </div>
           <div>
-            <p className="text-xs text-gray-400 font-medium mb-1">Eng ko'p faol bo'lingan vaqt</p>
-            <h3 className="text-lg font-bold">Hali ma'lumot yo'q</h3>
+            <p className="text-xs text-gray-400 font-medium mb-1">{t('stats.active_time')}</p>
+            <h3 className="text-lg font-bold">{t('stats.no_data')}</h3>
           </div>
         </div>
 
@@ -188,8 +192,8 @@ export default function Statistics() {
             <MapPin className="w-6 h-6 text-purple-500" />
           </div>
           <div>
-            <p className="text-xs text-gray-400 font-medium mb-1">Eng ko'p kirilgan joylashuv</p>
-            <h3 className="text-lg font-bold">Hali ma'lumot yo'q</h3>
+            <p className="text-xs text-gray-400 font-medium mb-1">{t('stats.top_location')}</p>
+            <h3 className="text-lg font-bold">{t('stats.no_data')}</h3>
           </div>
         </div>
       </div>
@@ -199,7 +203,7 @@ export default function Statistics() {
         <div className="flex items-center gap-2 mb-4">
           <Sparkles className="w-5 h-5 text-emerald-500" />
           <h2 className="text-sm font-bold text-emerald-500 uppercase tracking-wider">
-            Foydalanuvchilar statistikasi AI tahlili
+            {t('stats.ai_analysis_title')}
           </h2>
         </div>
         
@@ -207,11 +211,11 @@ export default function Statistics() {
           {aiLoading ? (
             <div className="flex items-center gap-3 text-gray-400">
               <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-              <p className="text-sm">AI tahlil tayyorlanmoqda...</p>
+              <p className="text-sm">{t('stats.ai_loading')}</p>
             </div>
           ) : aiError ? (
             <div className="text-gray-400 text-sm">
-              AI analizni yuklashda xatolik yuz berdi.
+              {t('stats.ai_error')}
             </div>
           ) : (
             <div className="text-gray-300 text-sm leading-relaxed prose prose-invert max-w-none">
@@ -223,7 +227,7 @@ export default function Statistics() {
 
       {/* Chart Section */}
       <div className="bg-[#111827] border border-white/5 p-8 rounded-2xl">
-        <h2 className="text-lg font-bold mb-8">Foydalanuvchilar o'sish dinamikasi</h2>
+        <h2 className="text-lg font-bold mb-8">{t('stats.growth_chart')}</h2>
         
         <div className="h-[400px] w-full">
           <ResponsiveContainer width="100%" height="100%">

@@ -87,22 +87,14 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && (
-        request.auth.uid == "bQeht0N5myM7GF7Ps0Tu5e5QHZG2" ||
-        (request.auth.token.email != null && request.auth.token.email.lower() == "qoziboyevaslbek359@gmail.com") ||
+        ('email' in request.auth.token && request.auth.token.email.lower() == "qoziboyevaslbek359@gmail.com") ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
       );
     }
 
-    function isAdminOrInWhitelist() {
-      return isAuthenticated() && (
-        (request.auth.token.email != null && (
-          request.auth.token.email.lower() == "qoziboyevaslbek359@gmail.com" ||
-          request.auth.token.email.lower() in ["admin@tezchipta.uz", "support@tezchipta.uz"]
-        )) ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
-      );
+    function isRecent(time) {
+      return time is string && duration.value(request.time - timestamp.value(time)) < duration.value(5, 'm');
     }
 
     function isDriver() {
@@ -133,7 +125,7 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidDriver(data) {
-      return hasOnlyAllowedFields(['name', 'photo', 'rating', 'experience', 'bio', 'phone', 'email', 'uid', 'createdAt']) &&
+      return (isAdmin() || hasOnlyAllowedFields(['name', 'photo', 'rating', 'experience', 'bio', 'phone', 'email', 'uid', 'createdAt', 'id'])) &&
              hasRequiredFields(['name', 'photo', 'rating', 'experience', 'bio', 'phone']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              isValidUrl(data.photo) && data.photo.size() < 1000000 &&
@@ -147,7 +139,7 @@ service cloud.firestore {
     }
 
     function isValidRide(data) {
-      return hasOnlyAllowedFields(['busType', 'departureTime', 'arrivalTime', 'duration', 'price', 'rating', 'driverId', 'date', 'from', 'to', 'images', 'status']) &&
+      return (isAdmin() || hasOnlyAllowedFields(['busType', 'departureTime', 'arrivalTime', 'duration', 'price', 'rating', 'driverId', 'date', 'from', 'to', 'images', 'status', 'id'])) &&
              hasRequiredFields(['busType', 'departureTime', 'arrivalTime', 'duration', 'price', 'rating', 'driverId', 'date', 'from', 'to', 'images', 'status']) &&
              data.busType is string && data.busType.size() > 0 && data.busType.size() < 100 &&
              data.departureTime is string && data.departureTime.size() > 0 && data.departureTime.size() < 50 &&
@@ -164,14 +156,14 @@ service cloud.firestore {
     }
 
     function isValidFaq(data) {
-      return hasOnlyAllowedFields(['question', 'answer']) &&
+      return (isAdmin() || hasOnlyAllowedFields(['question', 'answer', 'id'])) &&
              hasRequiredFields(['question', 'answer']) &&
              data.question is string && data.question.size() > 0 && data.question.size() < 500 &&
              data.answer is string && data.answer.size() > 0 && data.answer.size() < 2000;
     }
 
     function isValidUser(data) {
-      return hasOnlyAllowedFields(['name', 'email', 'phoneNumber', 'role', 'createdAt', 'birthDate', 'passport', 'address', 'isProfileComplete', 'picture', 'gender']) &&
+      return (isAdmin() || hasOnlyAllowedFields(['name', 'email', 'phoneNumber', 'role', 'createdAt', 'birthDate', 'passport', 'address', 'isProfileComplete', 'picture', 'gender', 'uid'])) &&
              hasRequiredFields(['name', 'role']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              (!('email' in data) || (data.email == "" || isValidEmail(data.email))) &&
@@ -183,15 +175,16 @@ service cloud.firestore {
              (!('isProfileComplete' in data) || (data.isProfileComplete is bool)) &&
              (!('picture' in data) || (isValidUrl(data.picture) && data.picture.size() < 2000)) &&
              (!('gender' in data) || data.gender in ['male', 'female']) &&
+             (!('uid' in data) || data.uid is string) &&
              data.role in ['admin', 'user', 'driver'];
     }
 
     function isValidBlog(data) {
-      return hasOnlyAllowedFields(['title', 'content', 'authorId', 'authorName', 'image', 'createdAt', 'tags']) &&
+      return (isAdmin() || hasOnlyAllowedFields(['title', 'content', 'authorId', 'authorName', 'image', 'createdAt', 'tags', 'id'])) &&
              hasRequiredFields(['title', 'content', 'authorId', 'authorName', 'createdAt']) &&
              data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
              data.content is string && data.content.size() > 0 && data.content.size() < 10000 &&
-             data.authorId is string && data.authorId == request.auth.uid &&
+             data.authorId is string && (data.authorId == request.auth.uid || isAdmin()) &&
              data.authorName is string && data.authorName.size() > 0 && data.authorName.size() < 100 &&
              (!('image' in data) || isValidUrl(data.image)) &&
              data.createdAt is string && data.createdAt.size() < 50 &&
@@ -199,9 +192,9 @@ service cloud.firestore {
     }
 
     function isValidBooking(data) {
-      return hasOnlyAllowedFields(['userId', 'rideId', 'seatNumber', 'status', 'createdAt', 'price', 'paymentStatus', 'paymentMethod', 'receiptUrl', 'receiptUploadedAt', 'stripeSessionId', 'updatedAt', 'passengerGender']) &&
+      return (isAdmin() || hasOnlyAllowedFields(['userId', 'rideId', 'seatNumber', 'status', 'createdAt', 'price', 'paymentStatus', 'paymentMethod', 'receiptUrl', 'receiptUploadedAt', 'stripeSessionId', 'updatedAt', 'passengerGender', 'id'])) &&
              hasRequiredFields(['userId', 'rideId', 'seatNumber', 'status', 'createdAt', 'price']) &&
-             data.userId is string && data.userId == request.auth.uid &&
+             data.userId is string && (data.userId == request.auth.uid || isAdmin()) &&
              data.rideId is string && data.rideId.size() > 0 &&
              data.seatNumber is number && data.seatNumber > 0 && data.seatNumber <= 100 &&
              data.status in ['pending', 'confirmed', 'cancelled'] &&
@@ -209,7 +202,7 @@ service cloud.firestore {
              data.price is number && data.price >= 0 &&
              (!('paymentStatus' in data) || data.paymentStatus in ['unpaid', 'paid', 'pending_review', 'rejected']) &&
              (!('paymentMethod' in data) || data.paymentMethod in ['stripe', 'manual']) &&
-             (!('receiptUrl' in data) || (isValidUrl(data.receiptUrl) && data.receiptUrl.size() < 1048576)) &&
+             (!('receiptUrl' in data) || (isValidUrl(data.receiptUrl) && data.receiptUrl.size() < 2000)) &&
              (!('receiptUploadedAt' in data) || data.receiptUploadedAt is string) &&
              (!('stripeSessionId' in data) || data.stripeSessionId is string) &&
              (!('updatedAt' in data) || data.updatedAt is string) &&
@@ -217,17 +210,19 @@ service cloud.firestore {
     }
 
     function isValidSettings(data) {
-      return data.adminCardNumber is string &&
+      return (isAdmin() || hasOnlyAllowedFields(['adminCardNumber', 'adminCardOwner', 'adminSupportPhone', 'stripeEnabled', 'manualEnabled', 'siteDescription', 'logoUrl', 'updatedAt', 'id'])) &&
+             data.adminCardNumber is string &&
              (!('adminCardOwner' in data) || data.adminCardOwner is string) &&
              (!('adminSupportPhone' in data) || data.adminSupportPhone is string) &&
              (!('stripeEnabled' in data) || data.stripeEnabled is bool) &&
              (!('manualEnabled' in data) || data.manualEnabled is bool) &&
              (!('siteDescription' in data) || data.siteDescription is string) &&
+             (!('logoUrl' in data) || isValidUrl(data.logoUrl)) &&
              data.updatedAt is string;
     }
 
     function isValidMessage(data) {
-      return hasOnlyAllowedFields(['name', 'contact', 'message', 'createdAt', 'status']) &&
+      return (isAdmin() || hasOnlyAllowedFields(['name', 'contact', 'message', 'createdAt', 'status', 'id'])) &&
              hasRequiredFields(['name', 'contact', 'message', 'createdAt', 'status']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.contact is string && data.contact.size() > 0 && data.contact.size() < 100 &&
@@ -236,20 +231,12 @@ service cloud.firestore {
              data.status in ['unread', 'read'];
     }
 
-    function isValidNewsletterSubscriber(data) {
-      return hasOnlyAllowedFields(['email', 'emailLower', 'createdAt', 'source', 'userId']) &&
-             hasRequiredFields(['email', 'emailLower', 'createdAt']) &&
-             isValidEmail(data.email) &&
-             data.emailLower is string && data.emailLower.size() > 0 && data.emailLower.size() < 200 &&
-             data.createdAt is string && data.createdAt.size() > 0 &&
-             (!('source' in data) || (data.source is string && data.source.size() < 100)) &&
-             (!('userId' in data) || (data.userId is string && data.userId.size() < 200));
-    }
-
     function isValidChat(data) {
-      return hasOnlyAllowedFields(['userId', 'userName', 'lastMessage', 'lastMessageAt', 'unreadCount', 'userUnreadCount', 'status']) &&
+      return (isAdmin() || hasOnlyAllowedFields(['userId', 'userName', 'lastMessage', 'lastMessageAt', 'unreadCount', 'userUnreadCount', 'status', 'id', 'userEmail'])) &&
              hasRequiredFields(['userId', 'userName', 'lastMessage', 'lastMessageAt', 'unreadCount', 'status']) &&
              data.userId is string && data.userId.size() > 0 &&
+             // Prevent self-messaging for admins
+             (!isAdmin() || data.userId != request.auth.uid) &&
              data.userName is string && data.userName.size() > 0 &&
              data.lastMessage is string && data.lastMessage.size() < 1000 &&
              data.lastMessageAt is string && data.lastMessageAt.size() > 0 &&
@@ -259,17 +246,19 @@ service cloud.firestore {
     }
 
     function isValidChatMessage(data) {
-      return hasOnlyAllowedFields(['chatId', 'senderId', 'text', 'createdAt', 'isAdmin']) &&
+      return (isAdmin() || hasOnlyAllowedFields(['chatId', 'senderId', 'text', 'createdAt', 'isAdmin', 'id'])) &&
              hasRequiredFields(['chatId', 'senderId', 'text', 'createdAt']) &&
              data.chatId is string && data.chatId.size() > 0 &&
              data.senderId is string && data.senderId == request.auth.uid &&
+             // Prevent self-messaging for admins
+             (!isAdmin() || get(/databases/$(database)/documents/chats/$(data.chatId)).data.userId != request.auth.uid) &&
              data.text is string && data.text.size() > 0 && data.text.size() < 2000 &&
              data.createdAt is string && data.createdAt.size() > 0 &&
              (!('isAdmin' in data) || (data.isAdmin is bool && (data.isAdmin == false || isAdmin())));
     }
 
     function isValidReview(data) {
-      return hasOnlyAllowedFields(['userName', 'userPhoto', 'rating', 'comment', 'status', 'createdAt', 'userId', 'isFeatured']) &&
+      return (isAdmin() || hasOnlyAllowedFields(['userName', 'userPhoto', 'rating', 'comment', 'status', 'createdAt', 'userId', 'isFeatured', 'id'])) &&
              hasRequiredFields(['userName', 'rating', 'comment', 'status', 'createdAt']) &&
              data.userName is string && data.userName.size() > 0 && data.userName.size() < 100 &&
              (!('userPhoto' in data) || isValidUrl(data.userPhoto)) &&
@@ -281,102 +270,166 @@ service cloud.firestore {
              (!('isFeatured' in data) || data.isFeatured is bool);
     }
 
+    function isValidSubscriber(data) {
+      return (isAdmin() || hasOnlyAllowedFields(['email', 'userId', 'subscribedAt', 'status', 'id'])) &&
+             hasRequiredFields(['email', 'subscribedAt', 'status']) &&
+             isValidEmail(data.email) &&
+             (!('userId' in data) || data.userId is string) &&
+             data.subscribedAt is string &&
+             data.status in ['active', 'unsubscribed'];
+    }
+
+    function isValidNewsletter(data) {
+      return (isAdmin() || hasOnlyAllowedFields(['subject', 'content', 'sentAt', 'authorId', 'recipientCount', 'id'])) &&
+             hasRequiredFields(['subject', 'content', 'sentAt', 'authorId', 'recipientCount']) &&
+             data.subject is string && data.subject.size() > 0 &&
+             data.content is string && data.content.size() > 0 &&
+             data.sentAt is string &&
+             data.authorId is string &&
+             data.recipientCount is number;
+    }
+
+    function isValidNotification(data) {
+      return (isAdmin() || hasOnlyAllowedFields(['title', 'type', 'details', 'target', 'createdAt', 'authorId', 'id'])) &&
+             hasRequiredFields(['title', 'type', 'details', 'target', 'createdAt', 'authorId']) &&
+             data.title is string && data.title.size() > 0 &&
+             data.type is string &&
+             data.details is string && data.details.size() > 0 &&
+             data.target in ['all', 'new'] &&
+             data.createdAt is string &&
+             data.authorId is string;
+    }
+
+    function isValidUserNotification(data) {
+      return hasOnlyAllowedFields(['userId', 'notificationId', 'readAt', 'status']) &&
+             hasRequiredFields(['userId', 'notificationId', 'readAt', 'status']) &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.notificationId is string &&
+             data.readAt is string &&
+             data.status == 'read';
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
 
-    // General rule for all collections: Admin can do anything
-    // For specific collections, we add user-level rules
-    
+    // Global Admin Rule
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+
     match /reviews/{reviewId} {
       allow read: if resource.data.status == 'approved' || isAdmin();
       allow create: if isServer(request.resource.data) || (isAuthenticated() && isValidReview(request.resource.data) && request.resource.data.status == 'pending');
-      allow update, delete: if isAdmin();
+      allow update: if isServer(request.resource.data) || (isAdmin() && isValidReview(request.resource.data));
+      allow delete: if isAdmin();
     }
 
     match /drivers/{driverId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create: if isServer(request.resource.data) || (isAdmin() && isValidDriver(request.resource.data));
+      allow update: if isServer(request.resource.data) || (isAdmin() && isValidDriver(request.resource.data));
+      allow delete: if isServer(resource.data) || isAdmin();
     }
 
     match /rides/{rideId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create: if isServer(request.resource.data) || (isAdmin() && isValidRide(request.resource.data));
+      allow update: if isServer(request.resource.data) || (isAdmin() && isValidRide(request.resource.data));
+      allow delete: if isServer(resource.data) || isAdmin();
     }
 
     match /faqs/{faqId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create: if isServer(request.resource.data) || (isAdmin() && isValidFaq(request.resource.data));
+      allow update: if isServer(request.resource.data) || (isAdmin() && isValidFaq(request.resource.data));
+      allow delete: if isServer(resource.data) || isAdmin();
     }
 
     match /users/{userId} {
-      allow read: if isAuthenticated(); // Needed for profile lookups and admin panel
-      allow create: if isServer(request.resource.data) || (isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data)) || isAdmin();
-      allow update: if isServer(request.resource.data) || (isAuthenticated() && (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data));
+      allow list: if isAdmin();
+      allow get: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow create: if isServer(request.resource.data) || 
+                    (isAuthenticated() && (
+                      (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == 'user') || 
+                      isAdmin()
+                    ));
+      allow update: if isServer(request.resource.data) || 
+                    (isAuthenticated() && (
+                      (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role) || 
+                      isAdmin()
+                    ));
       allow delete: if isAdmin();
     }
 
     match /bookings/{bookingId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isAuthenticated() && isValidBooking(request.resource.data);
-      allow update: if (isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidBooking(request.resource.data));
-      allow delete: if isAdmin();
+      allow read: if true;
+      allow create: if isServer(request.resource.data) || (isAuthenticated() && isValidBooking(request.resource.data));
+      allow update: if isServer(request.resource.data) || (isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidBooking(request.resource.data));
+      allow delete: if isServer(resource.data) || isAdmin();
     }
 
     match /messages/{messageId} {
       allow read: if isAdmin();
-      allow create: if isValidMessage(request.resource.data);
-      allow update, delete: if isAdmin();
-    }
-
-    match /newsletter_subscribers/{subscriberId} {
-      allow read: if isAdmin();
-      allow create: if isValidNewsletterSubscriber(request.resource.data);
-      allow update, delete: if isAdmin();
-    }
-
-    match /newsletters/{newsletterId} {
-      allow read, write: if isAdmin();
-    }
-
-    match /newsletter_history/{historyId} {
-      allow read, write: if isAdmin();
+      allow create: if isServer(request.resource.data) || isValidMessage(request.resource.data);
+      allow update: if isServer(request.resource.data) || (isAdmin() && isValidMessage(request.resource.data));
+      allow delete: if isServer(resource.data) || isAdmin();
     }
 
     match /chats/{chatId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isAuthenticated() && isValidChat(request.resource.data) && (request.resource.data.userId == request.auth.uid || isAdmin());
-      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidChat(request.resource.data);
-      allow delete: if isAdmin();
+      allow list: if isAdmin();
+      allow get: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isServer(request.resource.data) || (isAuthenticated() && isValidChat(request.resource.data) && (request.resource.data.userId == request.auth.uid || isAdmin()));
+      allow update: if isServer(request.resource.data) || (isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidChat(request.resource.data));
+      allow delete: if isServer(resource.data) || isAdmin();
       
       match /messages/{messageId} {
-        allow read: if isAuthenticated() && (get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid || isAdmin());
-        allow create: if (isAuthenticated() && isValidChatMessage(request.resource.data) && (get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid || isAdmin()));
+        allow list: if isAdmin() || (isAuthenticated() && get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid);
+        allow get: if isAuthenticated() && (get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid || isAdmin());
+        allow create: if isServer(request.resource.data) || (isAuthenticated() && isValidChatMessage(request.resource.data) && (get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid || isAdmin()));
       }
-    }
-
-    match /notifications/{notifId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isAdmin() || isServer(request.resource.data);
-      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow delete: if isAdmin();
     }
 
     match /blogs/{blogId} {
       allow read: if true;
-      allow create: if (isAdmin() || (isDriver() && isValidBlog(request.resource.data)));
-      allow update: if (isAdmin() || (isDriver() && resource.data.authorId == request.auth.uid && isValidBlog(request.resource.data)));
+      allow create: if isServer(request.resource.data) || (isAuthenticated() && (isAdmin() || isDriver()) && isValidBlog(request.resource.data));
+      allow update: if isServer(request.resource.data) || (isAuthenticated() && (isAdmin() || (isDriver() && resource.data.authorId == request.auth.uid)) && isValidBlog(request.resource.data));
       allow delete: if isAdmin() || (isDriver() && resource.data.authorId == request.auth.uid);
     }
 
     match /settings/payment {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isServer(request.resource.data) || (isAdmin() && isValidSettings(request.resource.data));
     }
 
     match /settings/{settingId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isServer(request.resource.data) || isAdmin();
+    }
+
+    match /subscribers/{subId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if isValidSubscriber(request.resource.data);
+      allow update: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid && isValidSubscriber(request.resource.data));
+      allow delete: if isAdmin();
+    }
+
+    match /newsletters/{newsId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() && isValidNewsletter(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() && isValidNotification(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /user_notifications/{userNotifId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidUserNotification(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidUserNotification(request.resource.data);
     }
   }
 }

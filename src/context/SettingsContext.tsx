@@ -12,7 +12,7 @@ interface SettingsContextType {
   siteDescription: string;
 }
 
-const defaultLogo = '/logo.png';
+const defaultLogo = '/icon.png';
 
 const SettingsContext = createContext<SettingsContextType>({
   logoUrl: defaultLogo,
@@ -40,8 +40,7 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
     const unsubscribe = onSnapshot(doc(db, 'settings', 'payment'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        // Force use local logo as requested
-        const newLogoUrl = defaultLogo;
+        const newLogoUrl = data.logoUrl || defaultLogo;
         setSettings({
           logoUrl: newLogoUrl,
           adminCardNumber: data.adminCardNumber || '8600 0000 0000 0000',

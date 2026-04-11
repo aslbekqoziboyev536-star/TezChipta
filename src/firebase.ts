@@ -1,12 +1,22 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import firebaseConfig from '../firebase-applet-config.json';
 import { getFirebaseErrorMessage } from './utils/firebaseErrors';
+
+// Firebase configuration from environment variables
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID
+};
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
 export const googleProvider = new GoogleAuthProvider();
 
 export enum OperationType {
@@ -49,9 +59,9 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
       tenantId: auth.currentUser?.tenantId,
       providerInfo: auth.currentUser?.providerData.map(provider => ({
         providerId: provider.providerId,
-        displayName: null,
+        displayName: provider.displayName,
         email: provider.email,
-        photoUrl: null
+        photoUrl: provider.photoURL
       })) || []
     },
     operationType,

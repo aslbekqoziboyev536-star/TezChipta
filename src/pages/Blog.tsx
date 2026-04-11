@@ -1,16 +1,15 @@
 import { useSettings } from '../context/SettingsContext';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Search, Tag, Calendar, User as UserIcon, ArrowRight, X, Image as ImageIcon, Newspaper, Bus, Filter, Globe, Check } from 'lucide-react';
+import { Plus, Search, Tag, Calendar, User as UserIcon, ArrowRight, X, Image as ImageIcon, Newspaper, Bus, Filter } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { Link } from 'react-router-dom';
-import { useLanguage } from '../context/LanguageContext';
 import { SafeImage } from '../components/SafeImage';
 import { Button } from '../components/ui/Button';
-import { Volume2, VolumeX, BellOff } from 'lucide-react';
 
 interface BlogPost {
   id: string;
@@ -26,6 +25,7 @@ interface BlogPost {
 export default function Blog() {
   const { logoUrl } = useSettings();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -33,15 +33,6 @@ export default function Blog() {
   const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [formLoading, setFormLoading] = useState(false);
-  const { t, language, setLanguage } = useLanguage();
-  const [selectedPost, setSelectedPost] = useState<BlogPost | null>(null);
-  const [showLangMenu, setShowLangMenu] = useState(false);
-
-  const languages = [
-    { code: 'uz', label: t('lang.uz'), flag: '🇺🇿' },
-    { code: 'ru', label: t('lang.ru'), flag: '🇷🇺' },
-    { code: 'en', label: t('lang.en'), flag: '🇬🇧' },
-  ] as const;
 
   const [formData, setFormData] = useState({
     title: '',
@@ -99,7 +90,7 @@ export default function Blog() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this post?')) return;
+    if (!window.confirm(t('blog.delete_confirm'))) return;
     try {
       await deleteDoc(doc(db, 'blogs', id));
     } catch (error) {
@@ -108,8 +99,8 @@ export default function Blog() {
   };
 
   const filteredPosts = posts.filter(post => {
-    const matchesSearch = post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      post.content.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = post.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                         post.content.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesTag = !selectedTag || (post.tags && post.tags.includes(selectedTag));
     return matchesSearch && matchesTag;
   });
@@ -130,43 +121,6 @@ export default function Blog() {
             </Link>
           </div>
           <div className="flex items-center space-x-4">
-            <div className="relative">
-              <Button
-                variant="ghost"
-                onClick={() => setShowLangMenu(!showLangMenu)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-full border-0 h-auto relative"
-                leftIcon={<Globe className="w-5 h-5 text-emerald-500" />}
-              />
-              <AnimatePresence>
-                {showLangMenu && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.9, y: -10 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.9, y: -10 }}
-                    className="absolute top-full right-0 mt-2 bg-white dark:bg-[#111827] border border-gray-200 dark:border-white/5 rounded-2xl shadow-lg overflow-hidden z-50"
-                  >
-                    {languages.map((lang) => (
-                      <button
-                        key={lang.code}
-                        onClick={() => {
-                          setLanguage(lang.code);
-                          setShowLangMenu(false);
-                        }}
-                        className={`w-full px-4 py-3 flex items-center gap-3 transition-colors ${
-                          language === lang.code
-                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5'
-                        }`}
-                      >
-                        <span className="text-lg">{lang.flag}</span>
-                        <span className="font-medium">{lang.label}</span>
-                        {language === lang.code && <Check className="w-4 h-4 ml-auto" />}
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
             <ThemeToggle />
             {canWrite && (
               <Button
@@ -188,14 +142,14 @@ export default function Blog() {
           <div className="absolute bottom-0 right-0 w-full h-full bg-[radial-gradient(circle_at_100%_100%,_rgba(16,185,129,0.2)_0%,_transparent_50%)]" />
         </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
-          <motion.h1
+          <motion.h1 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-4xl sm:text-6xl font-bold text-gray-900 dark:text-white mb-6"
           >
-            TezChipta <span className="text-emerald-500">Blogi</span>
+            {t('blog.title')}
           </motion.h1>
-          <motion.p
+          <motion.p 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
@@ -295,15 +249,14 @@ export default function Blog() {
                   </p>
 
                   <div className="flex items-center justify-between pt-6 border-t border-gray-100 dark:border-white/5">
-                    <Button
+                    <Button 
                       variant="ghost"
-                      onClick={() => setSelectedPost(post)}
                       className="flex items-center gap-2 text-emerald-500 font-bold text-sm group/btn p-0 h-auto hover:bg-transparent"
                       rightIcon={<ArrowRight className="w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />}
                     >
                       {t('blog.read_more')}
                     </Button>
-
+                    
                     {user && (user.role === 'admin' || user.id === post.authorId) && (
                       <div className="flex gap-2">
                         <Button
@@ -341,8 +294,8 @@ export default function Blog() {
             <div className="w-20 h-20 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6">
               <Newspaper className="w-10 h-10 text-gray-400" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{t('blog.empty_title')}</h3>
-            <p className="text-gray-500 dark:text-gray-400">{t('blog.empty_desc')}</p>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{t('blog.no_posts')}</h3>
+            <p className="text-gray-500 dark:text-gray-400">{t('blog.no_posts_desc')}</p>
           </div>
         )}
       </main>
@@ -366,12 +319,12 @@ export default function Blog() {
             >
               <div className="p-6 border-b border-gray-100 dark:border-white/5 flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {editingPost ? t('blog.modal.edit_title') : t('blog.modal.add_title')}
+                  {editingPost ? t('blog.edit_post') : t('blog.new_post')}
                 </h2>
-                <Button
+                <Button 
                   variant="ghost"
                   size="icon"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => setIsModalOpen(false)} 
                   className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-full transition-colors h-auto border-0"
                   leftIcon={<X className="w-6 h-6 text-gray-500" />}
                 />
@@ -379,19 +332,19 @@ export default function Blog() {
 
               <form onSubmit={handleSubmit} className="p-6 space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Sarlavha</label>
+                  <label className="text-sm font-bold text-gray-700 dark:text-gray-300">{t('blog.form.title')}</label>
                   <input
                     required
                     type="text"
                     value={formData.title}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     className="w-full px-4 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                    placeholder="Post sarlavhasini kiriting"
+                    placeholder={t('blog.form.title_placeholder')}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Rasm URL (ixtiyoriy)</label>
+                  <label className="text-sm font-bold text-gray-700 dark:text-gray-300">{t('blog.form.image')}</label>
                   <div className="relative">
                     <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                     <input
@@ -405,7 +358,7 @@ export default function Blog() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Teglar (vergul bilan ajrating)</label>
+                  <label className="text-sm font-bold text-gray-700 dark:text-gray-300">{t('blog.form.tags')}</label>
                   <div className="relative">
                     <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                     <input
@@ -413,20 +366,20 @@ export default function Blog() {
                       value={formData.tags}
                       onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
                       className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                      placeholder="sayohat, yangilik, maslahat"
+                      placeholder={t('blog.form.tags_placeholder')}
                     />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Mazmuni</label>
+                  <label className="text-sm font-bold text-gray-700 dark:text-gray-300">{t('blog.form.content')}</label>
                   <textarea
                     required
                     rows={6}
                     value={formData.content}
                     onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                     className="w-full px-4 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
-                    placeholder={t('blog.modal.content_placeholder')}
+                    placeholder={t('blog.form.content_placeholder')}
                   />
                 </div>
 
@@ -435,84 +388,9 @@ export default function Blog() {
                   loading={formLoading}
                   className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl transition-all shadow-lg shadow-emerald-500/20 mt-4 h-auto"
                 >
-                  {editingPost ? t('admin.common.save') : t('blog.publish')}
+                  {editingPost ? t('blog.form.save') : t('blog.form.publish')}
                 </Button>
               </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Post Detail Modal */}
-      <AnimatePresence>
-        {selectedPost && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedPost(null)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative w-full max-w-3xl bg-white dark:bg-[#111827] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
-            >
-              <div className="relative aspect-video flex-shrink-0">
-                <img
-                  src={selectedPost.image || `https://picsum.photos/seed/${selectedPost.id}/1200/800`}
-                  alt={selectedPost.title}
-                  className="w-full h-full object-cover"
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSelectedPost(null)}
-                  className="absolute top-4 right-4 bg-black/20 backdrop-blur-md text-white hover:bg-black/40 rounded-full h-10 w-10 border-0 p-0"
-                  leftIcon={<X className="w-6 h-6" />}
-                />
-              </div>
-
-              <div className="p-8 overflow-y-auto">
-                <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 mb-6 font-medium">
-                  <div className="flex items-center gap-2 px-3 py-1 bg-gray-100 dark:bg-white/5 rounded-lg">
-                    <Calendar className="w-4 h-4 text-emerald-500" />
-                    {new Date(selectedPost.createdAt).toLocaleDateString()}
-                  </div>
-                  <div className="flex items-center gap-2 px-3 py-1 bg-gray-100 dark:bg-white/5 rounded-lg">
-                    <UserIcon className="w-4 h-4 text-emerald-500" />
-                    {selectedPost.authorName}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedPost.tags?.map(tag => (
-                      <span key={tag} className="px-3 py-1 bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-lg uppercase tracking-wider">
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-6 leading-tight">
-                  {selectedPost.title}
-                </h2>
-
-                <div className="prose prose-emerald dark:prose-invert max-w-none">
-                  <p className="text-lg text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
-                    {selectedPost.content}
-                  </p>
-                </div>
-              </div>
-
-              <div className="p-6 border-t border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-white/5 flex justify-end">
-                <Button
-                  onClick={() => setSelectedPost(null)}
-                  className="px-8 py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold rounded-xl h-auto"
-                >
-                  {t('blog.modal.close')}
-                </Button>
-              </div>
             </motion.div>
           </div>
         )}

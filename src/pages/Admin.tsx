@@ -1,30 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { Button } from '../components/ui/Button';
-import { LayoutDashboard, Bus, Users, Settings, LogOut, Plus, Edit2, Trash2, Star, HelpCircle, Database, X, Moon, Sun, MessageCircle, Mail, Search, CloudSun, CreditCard, TrendingUp, ShieldCheck, User, Copy, Clock, Menu, ChevronRight } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { LayoutDashboard, Bus, Users, Settings, LogOut, Plus, Edit2, Trash2, Star, HelpCircle, Database, X, Moon, Sun, MessageCircle, Mail, Search, CloudSun, CreditCard, TrendingUp, ShieldCheck, User, Copy, Clock, Menu, Send, Bell } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { collection, getDocs, doc, deleteDoc, addDoc, updateDoc, setDoc, query, orderBy, onSnapshot, increment, where, limit } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc, addDoc, updateDoc, setDoc, query, orderBy, onSnapshot, increment, where } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
+import * as XLSX from 'xlsx';
 import { isValidPhone } from '../utils/validation';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { WeatherWidget } from '../components/WeatherWidget';
 import { SafeImage } from '../components/SafeImage';
 import { toast } from 'sonner';
 import { useLanguage } from '../context/LanguageContext';
-import * as XLSX from 'xlsx';
 
 export default function Admin() {
   const { user, loading: authLoading, logout } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
   const { tab } = useParams<{ tab: string }>();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'rides' | 'drivers' | 'faqs' | 'users' | 'messages' | 'newsletter' | 'chats' | 'notifications' | 'settings' | 'reviews' | 'payments'>((tab as any) || 'dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'rides' | 'drivers' | 'faqs' | 'users' | 'messages' | 'chats' | 'settings' | 'reviews' | 'payments' | 'newsletter' | 'notifications'>((tab as any) || 'dashboard');
 
   useEffect(() => {
     if (tab) {
-      const validTabs = ['dashboard', 'rides', 'drivers', 'faqs', 'users', 'messages', 'newsletter', 'chats', 'notifications', 'settings', 'reviews', 'payments'];
+      const validTabs = ['dashboard', 'rides', 'drivers', 'faqs', 'users', 'messages', 'chats', 'settings', 'reviews', 'payments', 'newsletter', 'notifications'];
       if (validTabs.includes(tab)) {
         setActiveTab(tab as any);
       } else {
@@ -45,12 +44,16 @@ export default function Admin() {
   const [faqs, setFaqs] = useState<any[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
-  const [newsletterSubscribers, setNewsletterSubscribers] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
   const [chats, setChats] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
+  const [subscribers, setSubscribers] = useState<any[]>([]);
+  const [newsletters, setNewsletters] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [newsletterForm, setNewsletterForm] = useState({ subject: '', content: '' });
+  const [notificationForm, setNotificationForm] = useState({ title: '', type: 'info', details: '', target: 'all' });
   const [adminCardNumber, setAdminCardNumber] = useState('');
-  const [logoUrl, setLogoUrl] = useState('https://imagehosting-hulf.onrender.com/uploads/743d26dac03143284afd0f450db04d85.png');
+  const [logoUrl, setLogoUrl] = useState('/icon.png');
   const [adminCardOwner, setAdminCardOwner] = useState('');
   const [adminSupportPhone, setAdminSupportPhone] = useState('');
   const [stripeEnabled, setStripeEnabled] = useState(true);
@@ -62,10 +65,6 @@ export default function Admin() {
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [adminChatInput, setAdminChatInput] = useState('');
   const [chatSearchQuery, setChatSearchQuery] = useState('');
-  const [newsletterSearchQuery, setNewsletterSearchQuery] = useState('');
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [showNotificationForm, setShowNotificationForm] = useState(false);
-  const [notificationForm, setNotificationForm] = useState({ title: '', message: '', target: 'all' as 'all' | 'newcomers' });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [formLoading, setFormLoading] = useState(false);
@@ -74,10 +73,6 @@ export default function Admin() {
   const [myDriverId, setMyDriverId] = useState<string | null>(null);
   const [selectedRideForBookings, setSelectedRideForBookings] = useState<any | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const isSubmittingNotifRef = useRef(false);
-  const [showCardSettings, setShowCardSettings] = useState(false);
-  const [showNewsletterForm, setShowNewsletterForm] = useState(false);
-  const [newsletterForm, setNewsletterForm] = useState({ subject: '', content: '' });
 
   // Form states
   const [showFaqForm, setShowFaqForm] = useState(false);
@@ -161,9 +156,11 @@ export default function Admin() {
       const bookingsCol = collection(db, 'bookings');
       const reviewsCol = collection(db, 'reviews');
       const settingsCol = collection(db, 'settings');
+      const subscribersCol = collection(db, 'subscribers');
+      const newslettersCol = collection(db, 'newsletters');
       const notificationsCol = collection(db, 'notifications');
 
-      let ridesSnapshot, driversSnapshot, faqsSnapshot, usersSnapshot, messagesSnapshot, bookingsSnapshot, reviewsSnapshot, settingsSnapshot, notificationsSnapshot;
+      let ridesSnapshot, driversSnapshot, faqsSnapshot, usersSnapshot, messagesSnapshot, bookingsSnapshot, reviewsSnapshot, settingsSnapshot, subscribersSnapshot, newslettersSnapshot, notificationsSnapshot;
       try {
         const promises = [
           getDocs(ridesCol),
@@ -177,11 +174,17 @@ export default function Admin() {
           promises.push(getDocs(usersCol));
           promises.push(getDocs(messagesCol));
           promises.push(getDocs(reviewsCol));
+          promises.push(getDocs(subscribersCol));
+          promises.push(getDocs(query(newslettersCol, orderBy('sentAt', 'desc'))));
+          promises.push(getDocs(query(notificationsCol, orderBy('createdAt', 'desc'))));
         } else {
           // Drivers only need approved reviews, or maybe no reviews at all. Let's fetch approved reviews for them if needed, or just empty.
           promises.push(Promise.resolve({ docs: [] } as any)); // users
           promises.push(Promise.resolve({ docs: [] } as any)); // messages
           promises.push(getDocs(query(reviewsCol, where('status', '==', 'approved')))); // reviews
+          promises.push(Promise.resolve({ docs: [] } as any)); // subscribers
+          promises.push(Promise.resolve({ docs: [] } as any)); // newsletters
+          promises.push(Promise.resolve({ docs: [] } as any)); // notifications
         }
 
         const results = await Promise.all(promises);
@@ -193,7 +196,10 @@ export default function Admin() {
         usersSnapshot = results[5];
         messagesSnapshot = results[6];
         reviewsSnapshot = results[7];
-
+        subscribersSnapshot = results[8];
+        newslettersSnapshot = results[9];
+        notificationsSnapshot = results[10];
+        
       } catch (err) {
         handleFirestoreError(err, OperationType.GET, 'multiple collections');
         return;
@@ -206,7 +212,10 @@ export default function Admin() {
       const messagesData = messagesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const bookingsData = bookingsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const reviewsData = reviewsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
+      const subscribersData = subscribersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const newslettersData = newslettersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const notificationsData = notificationsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
       const paymentSettings = settingsSnapshot.docs.find(d => d.id === 'payment')?.data();
       if (paymentSettings) {
         setAdminCardNumber(paymentSettings.adminCardNumber || '');
@@ -229,20 +238,9 @@ export default function Admin() {
       setMessages(messagesData);
       setBookings(bookingsData);
       setReviews(reviewsData);
-
-      if (user?.role === 'admin') {
-        try {
-          const newsletterSnapshot = await getDocs(
-            query(collection(db, 'newsletter_subscribers'), orderBy('createdAt', 'desc'))
-          );
-          const newsletterData = newsletterSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setNewsletterSubscribers(newsletterData);
-        } catch (err) {
-          handleFirestoreError(err, OperationType.GET, 'newsletter_subscribers');
-        }
-      } else {
-        setNewsletterSubscribers([]);
-      }
+      setSubscribers(subscribersData);
+      setNewsletters(newslettersData);
+      setNotifications(notificationsData);
 
       // If user is a driver, find their driver document ID
       if (user?.role === 'driver') {
@@ -260,7 +258,7 @@ export default function Admin() {
 
   useEffect(() => {
     if (authLoading) return;
-
+    
     if (!user) {
       navigate('/login');
       return;
@@ -270,68 +268,12 @@ export default function Admin() {
       const timer = setTimeout(() => navigate('/'), 3000);
       return () => clearTimeout(timer);
     }
-
+    
     fetchFirestoreData();
-  }, [user, authLoading, navigate, activeTab]);
-
-  useEffect(() => {
-    if (!user || user.role !== 'admin') return;
-    const notificationsRef = collection(db, 'notifications');
-    const q = query(notificationsRef, orderBy('createdAt', 'desc'), limit(50));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      // Use a Map with a content-based key to filter out identical notifications
-      // found in the last 50 entries (even if they have different IDs).
-      const uniqueDocs = new Map();
-
-      snapshot.docs.forEach(doc => {
-        const d = doc.data();
-        // Create a unique key based on content. We include a rounded timestamp (e.g. 1 minute) 
-        // if we want to allow repeats after some time, but for now strict content dedup is safer.
-        const contentKey = `${d.title}|${d.message}|${d.target}`;
-
-        if (!uniqueDocs.has(contentKey)) {
-          uniqueDocs.set(contentKey, { id: doc.id, ...d });
-        }
-      });
-
-      const data = Array.from(uniqueDocs.values());
-      setNotifications(data);
-    });
-    return () => unsubscribe();
-  }, [user?.role]);
+  }, [user, authLoading, navigate]);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('uz-UZ').format(price) + " so'm";
-  };
-
-  const filteredNewsletterSubscribers = newsletterSubscribers.filter((subscriber) => {
-    const queryValue = newsletterSearchQuery.trim().toLowerCase();
-    if (!queryValue) return true;
-    const email = (subscriber.email || '').toLowerCase();
-    const userId = (subscriber.userId || '').toLowerCase();
-    const source = (subscriber.source || '').toLowerCase();
-    return email.includes(queryValue) || userId.includes(queryValue) || source.includes(queryValue);
-  });
-
-  const handleDownloadNewsletterExcel = () => {
-    if (filteredNewsletterSubscribers.length === 0) {
-      toast.error("Eksport qilish uchun obunachilar topilmadi.");
-      return;
-    }
-
-    const rows = filteredNewsletterSubscribers.map((subscriber: any, index: number) => ({
-      '#': index + 1,
-      Email: subscriber.email || '',
-      'Obuna sanasi': subscriber.createdAt ? new Date(subscriber.createdAt).toLocaleString('uz-UZ') : '',
-      Manba: subscriber.source || '',
-      'User ID': subscriber.userId || ''
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Newsletter');
-    const fileName = `newsletter_subscribers_${new Date().toISOString().slice(0, 10)}.xlsx`;
-    XLSX.writeFile(workbook, fileName);
   };
 
   const handleDelete = async (collectionName: string, id: string) => {
@@ -409,7 +351,7 @@ export default function Admin() {
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value;
-
+    
     // If deleting, just update state
     if (value.length < driverForm.phone.length) {
       setDriverForm({ ...driverForm, phone: value });
@@ -423,10 +365,10 @@ export default function Admin() {
 
     // Extract only digits after +998
     let onlyDigits = value.slice(4).replace(/\D/g, '');
-
+    
     // Limit to 9 digits
     onlyDigits = onlyDigits.slice(0, 9);
-
+    
     // Apply mask: +998-XX-XXX-XX-XX
     let formatted = '+998';
     if (onlyDigits.length > 0) {
@@ -441,7 +383,7 @@ export default function Admin() {
     if (onlyDigits.length > 7) {
       formatted += '-' + onlyDigits.slice(7, 9);
     }
-
+    
     setDriverForm({ ...driverForm, phone: formatted });
   };
 
@@ -542,7 +484,7 @@ export default function Admin() {
   };
 
   const handleEditDriver = (driver: any) => {
-    setDriverForm({
+    setDriverForm({ 
       id: driver.id || '',
       name: driver.name || '',
       rating: driver.rating || 5.0,
@@ -579,7 +521,7 @@ export default function Admin() {
       }
 
       const { id, ...data } = rideForm;
-
+      
       if (id) {
         // Update existing ride
         try {
@@ -624,7 +566,7 @@ export default function Admin() {
     const files = e.target.files;
     if (files && files.length > 0) {
       const filesArray = Array.from(files);
-
+      
       filesArray.forEach(file => {
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -646,52 +588,16 @@ export default function Admin() {
 
   const handleUpdateUserRole = async (userId: string, newRole: string) => {
     try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) {
-        setError("No authentication token");
+      try {
+        await updateDoc(doc(db, 'users', userId), { role: newRole });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
         return;
       }
-
-      const endpoint = newRole === 'admin' 
-        ? '/api/admin/promote-to-admin'
-        : newRole === 'driver'
-        ? '/api/admin/promote-to-driver'
-        : null;
-
-      if (!endpoint) {
-        // For regular user role, update directly in Firestore
-        try {
-          await updateDoc(doc(db, 'users', userId), { role: newRole });
-        } catch (err) {
-          handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
-          return;
-        }
-        setUsersList(usersList.map(u => u.id === userId ? { ...u, role: newRole } : u));
-        return;
-      }
-
-      // Use server endpoint for admin and driver roles
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ userId })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to update user role");
-      }
-
-      const result = await response.json();
       setUsersList(usersList.map(u => u.id === userId ? { ...u, role: newRole } : u));
-      toast.success(`Foydalanuvchi ${newRole === 'admin' ? 'admin' : 'haydovchi'} qilib belgilandi`);
     } catch (error) {
       console.error("Error updating user role:", error);
-      setError(error instanceof Error ? error.message : "An error occurred while changing user role");
-      toast.error("Rol o'zgartirilmadi. Qayta urinib ko'ring.");
+      setError("An error occurred while changing user role");
     }
   };
 
@@ -730,7 +636,7 @@ export default function Admin() {
 
   const handleClearDatabase = async () => {
     if (!window.confirm("Are you sure you want to clear the database? This action cannot be undone!")) return;
-
+    
     setClearing(true);
     try {
       const idToken = await auth.currentUser?.getIdToken(true);
@@ -738,12 +644,12 @@ export default function Admin() {
 
       const response = await fetch('/api/admin/clear-database', {
         method: 'POST',
-        headers: {
+        headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         }
       });
-
+      
       const result = await response.json();
       if (response.ok) {
         toast.success(result.message);
@@ -783,6 +689,73 @@ export default function Admin() {
       toast.error("An error occurred while saving settings");
     } finally {
       setUpdatingSettings(false);
+    }
+  };
+
+  const exportSubscribersToExcel = () => {
+    const data = subscribers.map(s => ({
+      Email: s.email,
+      'Subscribed At': new Date(s.subscribedAt).toLocaleString(),
+      Status: s.status,
+      'User ID': s.userId || 'Guest'
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Subscribers");
+    XLSX.writeFile(workbook, "newsletter_subscribers.xlsx");
+  };
+
+  const handleSendNewsletter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newsletterForm.subject || !newsletterForm.content) return;
+
+    setFormLoading(true);
+    try {
+      const newsletterData = {
+        subject: newsletterForm.subject,
+        content: newsletterForm.content,
+        sentAt: new Date().toISOString(),
+        authorId: user?.id,
+        recipientCount: subscribers.length
+      };
+
+      await addDoc(collection(db, 'newsletters'), newsletterData);
+      setNewsletters([newsletterData, ...newsletters]);
+      setNewsletterForm({ subject: '', content: '' });
+      toast.success(t('admin.newsletter.success'));
+    } catch (error) {
+      console.error("Failed to send newsletter:", error);
+      handleFirestoreError(error, OperationType.CREATE, 'newsletters');
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  const handleSendNotification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!notificationForm.title || !notificationForm.details) return;
+
+    setFormLoading(true);
+    try {
+      const notificationData = {
+        title: notificationForm.title,
+        type: notificationForm.type,
+        details: notificationForm.details,
+        target: notificationForm.target,
+        createdAt: new Date().toISOString(),
+        authorId: user?.id
+      };
+
+      await addDoc(collection(db, 'notifications'), notificationData);
+      setNotifications([notificationData, ...notifications]);
+      setNotificationForm({ title: '', type: 'info', details: '', target: 'all' });
+      toast.success(t('admin.notifications.success'));
+    } catch (error) {
+      console.error("Failed to send notification:", error);
+      handleFirestoreError(error, OperationType.CREATE, 'notifications');
+    } finally {
+      setFormLoading(false);
     }
   };
 
@@ -835,6 +808,14 @@ export default function Admin() {
     e.preventDefault();
     if (!adminChatInput.trim() || !selectedChatId || !user) return;
 
+    // Prevent admin from messaging themselves
+    const currentChat = chats.find(c => c.id === selectedChatId);
+    if (currentChat && currentChat.userId === user.id) {
+      setAdminChatInput('');
+      toast.error("O'zingizga xabar yubora olmaysiz");
+      return;
+    }
+
     setChatLoading(true);
     const text = adminChatInput.trim();
     setAdminChatInput('');
@@ -849,7 +830,7 @@ export default function Admin() {
       };
 
       await addDoc(collection(db, 'chats', selectedChatId, 'messages'), messageData);
-
+      
       await updateDoc(doc(db, 'chats', selectedChatId), {
         lastMessage: text,
         lastMessageAt: new Date().toISOString(),
@@ -863,87 +844,9 @@ export default function Admin() {
     }
   };
 
-  const handleSendNotification = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!notificationForm.title || !notificationForm.message || !user || isSubmittingNotifRef.current) return;
-
-    isSubmittingNotifRef.current = true;
-    setFormLoading(true);
-    try {
-      const notificationData = {
-        title: notificationForm.title,
-        message: notificationForm.message,
-        target: notificationForm.target,
-        createdAt: new Date().toISOString(),
-        senderId: user.id
-      };
-
-      await addDoc(collection(db, 'notifications'), notificationData);
-      setShowNotificationForm(false);
-      setNotificationForm({ title: '', message: '', target: 'all' });
-      toast.success("Bildirishnoma muvaffaqiyatli yuborildi");
-    } catch (error) {
-      console.error("Error sending notification:", error);
-      toast.error("Bildirishnoma yuborishda xatolik yuz berdi");
-    } finally {
-      setFormLoading(false);
-      isSubmittingNotifRef.current = false;
-    }
-  };
-
-  const handleSendNewsletter = async () => {
-    if (!newsletterForm.subject || !newsletterForm.content || filteredNewsletterSubscribers.length === 0) {
-      if (filteredNewsletterSubscribers.length === 0) {
-        toast.error("Hali obunachilar yo'q.");
-      }
-      return;
-    }
-
-    setFormLoading(true);
-    try {
-      const idToken = await auth.currentUser?.getIdToken();
-      if (!idToken) throw new Error("Avtorizatsiya xatoligi. Iltimos qayta kiring.");
-
-      const response = await fetch('/api/admin/newsletter/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`
-        },
-        body: JSON.stringify({
-          subject: newsletterForm.subject,
-          message: newsletterForm.content,
-          htmlContent: `<div>${newsletterForm.content.replace(/\n/g, '<br/>')}</div>`
-        })
-      });
-
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Xabar yuborishda xatolik yuz berdi");
-
-      // Also keep record in history for UI if needed (though API might handle it)
-      const broadcastData = {
-        subject: newsletterForm.subject,
-        content: newsletterForm.content,
-        sentAt: new Date().toISOString(),
-        subscriberCount: filteredNewsletterSubscribers.length,
-        recipients: filteredNewsletterSubscribers.map(s => s.email).filter(Boolean)
-      };
-      await addDoc(collection(db, 'newsletter_history'), broadcastData);
-
-      toast.success(`${filteredNewsletterSubscribers.length} ta obunachiga xabar muvaffaqiyatli yuborildi!`);
-      setShowNewsletterForm(false);
-      setNewsletterForm({ subject: '', content: '' });
-    } catch (error: any) {
-      console.error("Error sending newsletter:", error);
-      toast.error(error.message || "Xabar yuborishda xatolik yuz berdi");
-    } finally {
-      setFormLoading(false);
-    }
-  };
-
   const handleStartChatWithUser = async (targetUser: any) => {
     const existingChat = chats.find(c => c.userId === targetUser.id);
-
+    
     if (existingChat) {
       setSelectedChatId(existingChat.id);
       handleTabChange('chats');
@@ -1025,10 +928,10 @@ export default function Admin() {
           </div>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Kirish taqiqlangan</h2>
           <p className="text-gray-600 dark:text-gray-400 mb-6">
-            Sizda ushbu sahifaga kirish uchun yetarli huquqlar yo'q.
+            Sizda ushbu sahifaga kirish uchun yetarli huquqlar yo'q. 
             Siz 3 soniyadan so'ng asosiy sahifaga yo'naltirilasiz.
           </p>
-          <Button
+          <Button 
             onClick={() => navigate('/')}
             className="w-full"
           >
@@ -1047,7 +950,7 @@ export default function Admin() {
     <div className="min-h-screen bg-gray-100 dark:bg-[#0B1120] flex font-sans text-gray-900 dark:text-gray-100 transition-colors duration-300 relative">
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
-        <div
+        <div 
           className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm transition-opacity"
           onClick={() => setIsSidebarOpen(false)}
         />
@@ -1062,9 +965,9 @@ export default function Admin() {
               <h1 className="text-xl font-bold text-emerald-500">Tezchipta Admin</h1>
             </div>
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
+          <Button 
+            variant="secondary" 
+            size="sm" 
             onClick={() => setIsSidebarOpen(false)}
             className="md:hidden p-1 h-auto border-0"
             leftIcon={<X className="w-5 h-5" />}
@@ -1074,8 +977,9 @@ export default function Admin() {
           <Button
             variant="secondary"
             onClick={() => handleTabChange('dashboard')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'dashboard' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
-              }`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${
+              activeTab === 'dashboard' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+            }`}
             leftIcon={<LayoutDashboard className="w-5 h-5" />}
           >
             {t('admin.dashboard')}
@@ -1083,8 +987,9 @@ export default function Admin() {
           <Button
             variant="secondary"
             onClick={() => handleTabChange('rides')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'rides' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
-              }`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${
+              activeTab === 'rides' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+            }`}
             leftIcon={<Bus className="w-5 h-5" />}
           >
             {t('admin.rides')}
@@ -1094,8 +999,9 @@ export default function Admin() {
               <Button
                 variant="secondary"
                 onClick={() => handleTabChange('drivers')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'drivers' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
-                  }`}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${
+                  activeTab === 'drivers' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+                }`}
                 leftIcon={<Users className="w-5 h-5" />}
               >
                 {t('admin.drivers')}
@@ -1103,8 +1009,9 @@ export default function Admin() {
               <Button
                 variant="secondary"
                 onClick={() => handleTabChange('faqs')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'faqs' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
-                  }`}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${
+                  activeTab === 'faqs' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+                }`}
                 leftIcon={<HelpCircle className="w-5 h-5" />}
               >
                 {t('admin.faqs')}
@@ -1112,8 +1019,9 @@ export default function Admin() {
               <Button
                 variant="secondary"
                 onClick={() => handleTabChange('users')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'users' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
-                  }`}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${
+                  activeTab === 'users' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+                }`}
                 leftIcon={<Users className="w-5 h-5" />}
               >
                 {t('admin.users')}
@@ -1121,8 +1029,9 @@ export default function Admin() {
               <Button
                 variant="secondary"
                 onClick={() => handleTabChange('messages')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'messages' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
-                  }`}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${
+                  activeTab === 'messages' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+                }`}
                 leftIcon={<MessageCircle className="w-5 h-5" />}
               >
                 {t('admin.messages')}
@@ -1134,23 +1043,10 @@ export default function Admin() {
               </Button>
               <Button
                 variant="secondary"
-                onClick={() => handleTabChange('newsletter')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'newsletter' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
-                  }`}
-                leftIcon={<Mail className="w-5 h-5" />}
-              >
-                Newsletter
-                {newsletterSubscribers.length > 0 && (
-                  <span className="ml-auto bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                    {newsletterSubscribers.length}
-                  </span>
-                )}
-              </Button>
-              <Button
-                variant="secondary"
                 onClick={() => handleTabChange('chats')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'chats' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
-                  }`}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${
+                  activeTab === 'chats' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+                }`}
                 leftIcon={<MessageCircle className="w-5 h-5" />}
               >
                 {t('admin.chats')}
@@ -1162,18 +1058,10 @@ export default function Admin() {
               </Button>
               <Button
                 variant="secondary"
-                onClick={() => handleTabChange('notifications')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'notifications' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
-                  }`}
-                leftIcon={<Mail className="w-5 h-5" />}
-              >
-                Bildirishnomalar
-              </Button>
-              <Button
-                variant="secondary"
                 onClick={() => handleTabChange('reviews')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'reviews' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
-                  }`}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${
+                  activeTab === 'reviews' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+                }`}
                 leftIcon={<Star className="w-5 h-5" />}
               >
                 {t('admin.reviews')}
@@ -1186,8 +1074,9 @@ export default function Admin() {
               <Button
                 variant="secondary"
                 onClick={() => handleTabChange('payments')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'payments' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
-                  }`}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${
+                  activeTab === 'payments' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+                }`}
                 leftIcon={<CreditCard className="w-5 h-5" />}
               >
                 {t('admin.payments')}
@@ -1197,19 +1086,40 @@ export default function Admin() {
                   </span>
                 )}
               </Button>
+              <Button
+                variant="secondary"
+                onClick={() => handleTabChange('newsletter')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${
+                  activeTab === 'newsletter' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+                }`}
+                leftIcon={<Mail className="w-5 h-5" />}
+              >
+                {t('admin.newsletter')}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => handleTabChange('notifications')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${
+                  activeTab === 'notifications' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+                }`}
+                leftIcon={<Bell className="w-5 h-5" />}
+              >
+                {t('admin.notifications')}
+              </Button>
             </>
           )}
-          {user?.role === 'admin' && (
-            <Button
-              variant="secondary"
-              onClick={() => handleTabChange('settings')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${activeTab === 'settings' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+            {user?.role === 'admin' && (
+              <Button
+                variant="secondary"
+                onClick={() => handleTabChange('settings')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${
+                  activeTab === 'settings' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
                 }`}
-              leftIcon={<Settings className="w-5 h-5" />}
-            >
-              {t('admin.settings')}
-            </Button>
-          )}
+                leftIcon={<Settings className="w-5 h-5" />}
+              >
+                {t('admin.settings')}
+              </Button>
+            )}
         </nav>
         <div className="p-4 border-t border-gray-200 dark:border-white/5">
           <Link
@@ -1238,7 +1148,7 @@ export default function Admin() {
         {/* Mobile Header */}
         <header className="md:hidden bg-white dark:bg-[#111827] border-b border-gray-200 dark:border-white/5 p-4 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-3">
-            <Button
+            <Button 
               variant="secondary"
               size="sm"
               onClick={() => setIsSidebarOpen(true)}
@@ -1252,7 +1162,7 @@ export default function Admin() {
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Button
+            <Button 
               variant="secondary"
               size="sm"
               onClick={() => {
@@ -1268,18 +1178,14 @@ export default function Admin() {
         {/* Global Header */}
         <header className="hidden md:flex bg-white dark:bg-[#111827] border-b border-gray-200 dark:border-white/5 p-4 sm:p-6 items-center justify-between sticky top-0 z-20">
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white capitalize">
-            {activeTab === 'dashboard' ? 'Dashboard' :
-              activeTab === 'rides' ? 'Qatnovlar' :
-                activeTab === 'drivers' ? 'Haydovchilar' :
-                  activeTab === 'faqs' ? 'FAQlar' :
-                    activeTab === 'users' ? 'Foydalanuvchilar' :
-                      activeTab === 'messages' ? 'Xabarlar' :
-                        activeTab === 'newsletter' ? 'Newsletter' :
-                          activeTab === 'chats' ? 'Chatlar' :
-                            activeTab === 'notifications' ? 'Bildirishnomalar' :
-                              activeTab === 'reviews' ? 'Fikrlar' :
-                                activeTab === 'payments' ? "To'lovlar" :
-                                  'Sozlamalar'}
+            {activeTab === 'dashboard' ? 'Dashboard' : 
+             activeTab === 'rides' ? 'Qatnovlar' :
+             activeTab === 'drivers' ? 'Haydovchilar' :
+             activeTab === 'faqs' ? 'FAQlar' :
+             activeTab === 'users' ? 'Foydalanuvchilar' :
+             activeTab === 'messages' ? 'Xabarlar' :
+             activeTab === 'chats' ? 'Chatlar' :
+             activeTab === 'reviews' ? 'Fikrlar' : 'Sozlamalar'}
           </h2>
           {user?.role === 'admin' && (
             <div className="flex items-center gap-2 sm:gap-4">
@@ -1317,10 +1223,10 @@ export default function Admin() {
                   </Link>
                 </div>
               </div>
-              <Button
+              <Button 
                 variant="secondary"
                 size="sm"
-                onClick={() => setError(null)}
+                onClick={() => setError(null)} 
                 className="hover:opacity-70 border-0 p-1 h-auto bg-transparent"
                 leftIcon={<X className="w-4 h-4" />}
               />
@@ -1330,7 +1236,7 @@ export default function Admin() {
             <div className="space-y-6">
               {/* Weather Widget */}
               <WeatherWidget />
-
+              
               <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-6">
                 <div className="bg-white dark:bg-[#111827] p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5">
                   <div className="w-10 h-10 sm:w-12 sm:h-12 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center mb-3 sm:mb-4">
@@ -1394,7 +1300,7 @@ export default function Admin() {
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="hidden md:block" /> {/* Spacer for global header */}
-                <Button
+                <Button 
                   onClick={() => {
                     if (showRideForm) {
                       setShowRideForm(false);
@@ -1418,15 +1324,15 @@ export default function Admin() {
                   <form onSubmit={handleAddRide} className="space-y-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Qayerdan</label>
-                      <input type="text" required value={rideForm.from} onChange={e => setRideForm({ ...rideForm, from: e.target.value })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                      <input type="text" required value={rideForm.from} onChange={e => setRideForm({...rideForm, from: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Qayerga</label>
-                      <input type="text" required value={rideForm.to} onChange={e => setRideForm({ ...rideForm, to: e.target.value })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                      <input type="text" required value={rideForm.to} onChange={e => setRideForm({...rideForm, to: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sana</label>
-                      <select required value={rideForm.date} onChange={e => setRideForm({ ...rideForm, date: e.target.value })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                      <select required value={rideForm.date} onChange={e => setRideForm({...rideForm, date: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
                         <option value="today">Bugun</option>
                         <option value="tomorrow">Ertaga</option>
                         <option value="weekly">Haftalik</option>
@@ -1434,27 +1340,27 @@ export default function Admin() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ketish vaqti</label>
-                      <input type="time" required value={rideForm.departureTime} onChange={e => setRideForm({ ...rideForm, departureTime: e.target.value })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                      <input type="time" required value={rideForm.departureTime} onChange={e => setRideForm({...rideForm, departureTime: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Yetib borish vaqti</label>
-                      <input type="time" required value={rideForm.arrivalTime} onChange={e => setRideForm({ ...rideForm, arrivalTime: e.target.value })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                      <input type="time" required value={rideForm.arrivalTime} onChange={e => setRideForm({...rideForm, arrivalTime: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Narx (so'm)</label>
-                      <input type="number" required value={rideForm.price} onChange={e => setRideForm({ ...rideForm, price: Number(e.target.value) })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                      <input type="number" required value={rideForm.price} onChange={e => setRideForm({...rideForm, price: Number(e.target.value)})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Avtomobil turi</label>
-                      <input type="text" required value={rideForm.busType} onChange={e => setRideForm({ ...rideForm, busType: e.target.value })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                      <input type="text" required value={rideForm.busType} onChange={e => setRideForm({...rideForm, busType: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">O'rindiqlar soni</label>
-                      <input type="number" required min="1" value={rideForm.totalSeats} onChange={e => setRideForm({ ...rideForm, totalSeats: Number(e.target.value) })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                      <input type="number" required min="1" value={rideForm.totalSeats} onChange={e => setRideForm({...rideForm, totalSeats: Number(e.target.value)})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">O'rindiqlar joylashuvi</label>
-                      <select required value={rideForm.seatLayout || '2x2'} onChange={e => setRideForm({ ...rideForm, seatLayout: e.target.value })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                      <select required value={rideForm.seatLayout || '2x2'} onChange={e => setRideForm({...rideForm, seatLayout: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
                         <option value="2x2">2x2 (Standart)</option>
                         <option value="2x1">2x1 (VIP)</option>
                         <option value="1x2">1x2 (VIP)</option>
@@ -1462,16 +1368,16 @@ export default function Admin() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Davomiyligi (masalan, 4 soat 30 daq)</label>
-                      <input type="text" required value={rideForm.duration} onChange={e => setRideForm({ ...rideForm, duration: e.target.value })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                      <input type="text" required value={rideForm.duration} onChange={e => setRideForm({...rideForm, duration: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reyting</label>
-                      <input type="number" step="0.1" required value={rideForm.rating} onChange={e => setRideForm({ ...rideForm, rating: Number(e.target.value) })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                      <input type="number" step="0.1" required value={rideForm.rating} onChange={e => setRideForm({...rideForm, rating: Number(e.target.value)})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Haydovchi</label>
-                      <select required value={rideForm.driverId} onChange={e => setRideForm({ ...rideForm, driverId: e.target.value })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                      <select required value={rideForm.driverId} onChange={e => setRideForm({...rideForm, driverId: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
                         <option value="">Haydovchini tanlang</option>
                         {drivers.map(d => (
                           <option key={d.id} value={d.id}>{d.name}</option>
@@ -1480,7 +1386,7 @@ export default function Admin() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
-                      <select required value={rideForm.status} onChange={e => setRideForm({ ...rideForm, status: e.target.value })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                      <select required value={rideForm.status} onChange={e => setRideForm({...rideForm, status: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
                         <option value="active">Faol</option>
                         <option value="completed">Yakunlangan</option>
                         <option value="cancelled">Bekor qilingan</option>
@@ -1492,9 +1398,9 @@ export default function Admin() {
                         {(rideForm.images || []).map((img, idx) => (
                           <div key={idx} className="relative w-24 h-24 group">
                             <img src={img} alt={`Bus ${idx}`} className="w-full h-full object-cover rounded-xl border border-gray-200 dark:border-white/10" />
-                            <Button
+                            <Button 
                               type="button"
-                              onClick={() => setRideForm({ ...rideForm, images: (rideForm.images || []).filter((_, i) => i !== idx) })}
+                              onClick={() => setRideForm({...rideForm, images: (rideForm.images || []).filter((_, i) => i !== idx)})}
                               className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white p-1 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity w-6 h-6 flex items-center justify-center shadow-lg border-0"
                               variant="secondary"
                               size="sm"
@@ -1506,14 +1412,14 @@ export default function Admin() {
                         {(rideForm.images || []).length < 10 && (
                           <label className="w-24 h-24 border-2 border-dashed border-gray-300 dark:border-white/10 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-emerald-500 transition-colors bg-gray-50 dark:bg-white/5">
                             <Plus className="w-6 h-6 text-gray-400" />
-                            <span className="text-[10px] text-gray-400 mt-1">Rasm</span>
+                            <span className="text-[10px] text-gray-400 mt-1">{t('admin.rides.image')}</span>
                             <input type="file" accept="image/*" multiple onChange={handleRidePhotoChange} className="hidden" />
                           </label>
                         )}
                       </div>
                     </div>
                     <div className="col-span-1 md:col-span-2">
-                      <Button type="submit" loading={formLoading} className="h-auto">Saqlash</Button>
+                      <Button type="submit" loading={formLoading} className="h-auto">{t('admin.rides.save')}</Button>
                     </div>
                   </form>
                 </div>
@@ -1522,54 +1428,54 @@ export default function Admin() {
               {/* Filtering and Sorting */}
               <div className="bg-white dark:bg-[#111827] p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Qayerdan</label>
-                  <input
-                    type="text"
-                    placeholder="Toshkent..."
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{t('admin.rides.from')}</label>
+                  <input 
+                    type="text" 
+                    placeholder={t('admin.rides.placeholder_from')} 
                     value={rideFilters.from}
-                    onChange={e => setRideFilters({ ...rideFilters, from: e.target.value })}
+                    onChange={e => setRideFilters({...rideFilters, from: e.target.value})}
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-900 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Qayerga</label>
-                  <input
-                    type="text"
-                    placeholder="Samarqand..."
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{t('admin.rides.to')}</label>
+                  <input 
+                    type="text" 
+                    placeholder={t('admin.rides.placeholder_to')} 
                     value={rideFilters.to}
-                    onChange={e => setRideFilters({ ...rideFilters, to: e.target.value })}
+                    onChange={e => setRideFilters({...rideFilters, to: e.target.value})}
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-900 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Sana</label>
-                  <select
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{t('admin.rides.date')}</label>
+                  <select 
                     value={rideFilters.date}
-                    onChange={e => setRideFilters({ ...rideFilters, date: e.target.value })}
+                    onChange={e => setRideFilters({...rideFilters, date: e.target.value})}
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-900 dark:text-white"
                   >
-                    <option value="">Barchasi</option>
-                    <option value="today">Bugun</option>
-                    <option value="tomorrow">Ertaga</option>
-                    <option value="weekly">Haftalik</option>
+                    <option value="">{t('admin.rides.all')}</option>
+                    <option value="today">{t('admin.rides.today')}</option>
+                    <option value="tomorrow">{t('admin.rides.tomorrow')}</option>
+                    <option value="weekly">{t('admin.rides.weekly')}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Status</label>
-                  <select
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{t('admin.rides.status')}</label>
+                  <select 
                     value={rideFilters.status}
-                    onChange={e => setRideFilters({ ...rideFilters, status: e.target.value })}
+                    onChange={e => setRideFilters({...rideFilters, status: e.target.value})}
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-900 dark:text-white"
                   >
-                    <option value="all">Barchasi</option>
-                    <option value="active">Faol</option>
-                    <option value="completed">Yakunlangan</option>
-                    <option value="cancelled">Bekor qilingan</option>
+                    <option value="all">{t('admin.rides.all')}</option>
+                    <option value="active">{t('admin.rides.active')}</option>
+                    <option value="completed">{t('admin.rides.completed')}</option>
+                    <option value="cancelled">{t('admin.rides.cancelled')}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Saralash</label>
-                  <select
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{t('admin.rides.sort')}</label>
+                  <select 
                     value={`${rideSort.key}-${rideSort.order}`}
                     onChange={e => {
                       const [key, order] = e.target.value.split('-');
@@ -1577,11 +1483,11 @@ export default function Admin() {
                     }}
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-900 dark:text-white"
                   >
-                    <option value="departureTime-asc">Vaqt (oldinroq)</option>
-                    <option value="departureTime-desc">Vaqt (kechroq)</option>
-                    <option value="price-asc">Narx (arzonroq)</option>
-                    <option value="price-desc">Narx (qimmatroq)</option>
-                    <option value="rating-desc">Reyting (yuqori)</option>
+                    <option value="departureTime-asc">{t('admin.rides.time_asc')}</option>
+                    <option value="departureTime-desc">{t('admin.rides.time_desc')}</option>
+                    <option value="price-asc">{t('admin.rides.price_asc')}</option>
+                    <option value="price-desc">{t('admin.rides.price_desc')}</option>
+                    <option value="rating-desc">{t('admin.rides.rating_desc')}</option>
                   </select>
                 </div>
               </div>
@@ -1591,11 +1497,11 @@ export default function Admin() {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-gray-50 dark:bg-white/5 border-b border-gray-100 dark:border-white/5">
-                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Yo'nalish</th>
-                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Haydovchi</th>
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">{t('admin.rides.route')}</th>
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">{t('admin.rides.driver')}</th>
                         <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">{t('admin.common.date')} / Vaqt</th>
                         <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">{t('admin.common.status')}</th>
-                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Turi / {t('admin.common.price')}</th>
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">{t('admin.rides.type_price')}</th>
                         <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">{t('admin.common.actions')}</th>
                       </tr>
                     </thead>
@@ -1615,14 +1521,14 @@ export default function Admin() {
                         .sort((a, b) => {
                           const valA = a[rideSort.key] ?? '';
                           const valB = b[rideSort.key] ?? '';
-
+                          
                           if (typeof valA === 'number' && typeof valB === 'number') {
                             return rideSort.order === 'asc' ? valA - valB : valB - valA;
                           }
-
+                          
                           const strA = String(valA).toLowerCase();
                           const strB = String(valB).toLowerCase();
-
+                          
                           if (rideSort.order === 'asc') {
                             return strA > strB ? 1 : -1;
                           } else {
@@ -1638,7 +1544,7 @@ export default function Admin() {
                                 <div className="text-xs text-gray-500 dark:text-gray-400">{ride.duration}</div>
                               </td>
                               <td className="p-4">
-                                <div className="text-sm text-gray-900 dark:text-white font-medium">{driver?.name || 'Noma\'lum'}</div>
+                                <div className="text-sm text-gray-900 dark:text-white font-medium">{driver?.name || t('admin.rides.unknown_driver')}</div>
                                 <div className="flex items-center text-amber-500 text-xs">
                                   <Star className="w-3 h-3 fill-current mr-1" />
                                   {ride.rating}
@@ -1649,11 +1555,12 @@ export default function Admin() {
                                 <div className="text-xs text-gray-500">{ride.departureTime} - {ride.arrivalTime}</div>
                               </td>
                               <td className="p-4">
-                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${ride.status === 'active' ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' :
+                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                  ride.status === 'active' ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' :
                                   ride.status === 'completed' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400' :
-                                    'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400'
-                                  }`}>
-                                  {ride.status === 'active' ? 'Faol' : ride.status === 'completed' ? 'Yakunlangan' : 'Bekor qilingan'}
+                                  'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400'
+                                }`}>
+                                  {ride.status === 'active' ? t('admin.rides.active') : ride.status === 'completed' ? t('admin.rides.completed') : t('admin.rides.cancelled')}
                                 </span>
                               </td>
                               <td className="p-4">
@@ -1661,21 +1568,21 @@ export default function Admin() {
                                 <div className="text-[10px] text-gray-500 uppercase font-bold">{ride.busType}</div>
                               </td>
                               <td className="p-4 text-sm flex items-center gap-2">
-                                <Button
+                                <Button 
                                   variant="secondary"
                                   size="sm"
                                   onClick={() => handleEditRide(ride)}
                                   className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
                                   leftIcon={<Edit2 className="w-4 h-4" />}
                                 />
-                                <Button
+                                <Button 
                                   variant="secondary"
                                   size="sm"
                                   onClick={() => setSelectedRideForBookings(ride)}
                                   className="p-2 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
                                   leftIcon={<Users className="w-4 h-4" />}
                                 />
-                                <Button
+                                <Button 
                                   variant="secondary"
                                   size="sm"
                                   onClick={() => handleDelete('rides', ride.id)}
@@ -1697,7 +1604,7 @@ export default function Admin() {
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="hidden md:block" />
-                <Button
+                <Button 
                   onClick={() => {
                     if (!showDriverForm) {
                       setDriverForm({ id: '', name: '', rating: 5.0, experience: 0, phone: '', photo: '', bio: '', email: '', password: '' });
@@ -1719,29 +1626,29 @@ export default function Admin() {
                   <form onSubmit={handleAddDriver} className="space-y-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="col-span-1 md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ism</label>
-                      <input type="text" required value={driverForm.name} onChange={e => setDriverForm({ ...driverForm, name: e.target.value })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                      <input type="text" required value={driverForm.name} onChange={e => setDriverForm({...driverForm, name: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
                     </div>
                     {!driverForm.id && (
                       <>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email (Login)</label>
-                          <input type="email" required value={driverForm.email} onChange={e => setDriverForm({ ...driverForm, email: e.target.value })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                          <input type="email" required value={driverForm.email} onChange={e => setDriverForm({...driverForm, email: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Parol</label>
-                          <input type="password" required value={driverForm.password} onChange={e => setDriverForm({ ...driverForm, password: e.target.value })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                          <input type="password" required value={driverForm.password} onChange={e => setDriverForm({...driverForm, password: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
                         </div>
                       </>
                     )}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Telefon (+998-XX-XXX-XX-XX)</label>
-                      <input
-                        type="text"
-                        required
-                        value={driverForm.phone}
-                        onChange={handlePhoneChange}
+                      <input 
+                        type="text" 
+                        required 
+                        value={driverForm.phone} 
+                        onChange={handlePhoneChange} 
                         placeholder="+998-90-123-45-67"
-                        className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" 
                       />
                     </div>
                     <div>
@@ -1754,25 +1661,25 @@ export default function Admin() {
                             <Users className="w-6 h-6 text-gray-400" />
                           )}
                         </div>
-                        <input
-                          type="file"
+                        <input 
+                          type="file" 
                           accept="image/*"
                           onChange={handleDriverPhotoChange}
-                          className="flex-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 dark:file:bg-emerald-500/10 dark:file:text-emerald-400"
+                          className="flex-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 dark:file:bg-emerald-500/10 dark:file:text-emerald-400" 
                         />
                       </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tajriba (yil)</label>
-                      <input type="number" required value={driverForm.experience} onChange={e => setDriverForm({ ...driverForm, experience: Number(e.target.value) })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                      <input type="number" required value={driverForm.experience} onChange={e => setDriverForm({...driverForm, experience: Number(e.target.value)})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reyting</label>
-                      <input type="number" step="0.1" required value={driverForm.rating} onChange={e => setDriverForm({ ...driverForm, rating: Number(e.target.value) })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                      <input type="number" step="0.1" required value={driverForm.rating} onChange={e => setDriverForm({...driverForm, rating: Number(e.target.value)})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
                     </div>
                     <div className="col-span-1 md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bio</label>
-                      <textarea required value={driverForm.bio} onChange={e => setDriverForm({ ...driverForm, bio: e.target.value })} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 min-h-[100px]"></textarea>
+                      <textarea required value={driverForm.bio} onChange={e => setDriverForm({...driverForm, bio: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 min-h-[100px]"></textarea>
                     </div>
                     <div className="col-span-1 md:col-span-2">
                       <Button type="submit" loading={formLoading} className="h-auto">{t('admin.common.save')}</Button>
@@ -1811,14 +1718,14 @@ export default function Admin() {
                           <td className="p-4 text-sm text-gray-600 dark:text-gray-400">{driver.experience} yil</td>
                           <td className="p-4 text-sm text-gray-600 dark:text-gray-400">{driver.phone}</td>
                           <td className="p-4 text-sm flex items-center gap-2">
-                            <Button
+                            <Button 
                               variant="secondary"
                               size="sm"
                               onClick={() => handleEditDriver(driver)}
                               className="p-2 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
                               leftIcon={<Edit2 className="w-4 h-4" />}
                             />
-                            <Button
+                            <Button 
                               variant="secondary"
                               size="sm"
                               onClick={() => handleDelete('drivers', driver.id)}
@@ -1839,7 +1746,7 @@ export default function Admin() {
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="hidden md:block" />
-                <Button
+                <Button 
                   onClick={() => setShowFaqForm(!showFaqForm)}
                   className="flex items-center gap-2 w-fit h-auto"
                   leftIcon={showFaqForm ? <X className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
@@ -1856,20 +1763,20 @@ export default function Admin() {
                   <form onSubmit={handleAddFaq} className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Savol</label>
-                      <input
-                        type="text"
+                      <input 
+                        type="text" 
                         required
                         value={faqForm.question}
-                        onChange={e => setFaqForm({ ...faqForm, question: e.target.value })}
+                        onChange={e => setFaqForm({...faqForm, question: e.target.value})}
                         className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Javob</label>
-                      <textarea
+                      <textarea 
                         required
                         value={faqForm.answer}
-                        onChange={e => setFaqForm({ ...faqForm, answer: e.target.value })}
+                        onChange={e => setFaqForm({...faqForm, answer: e.target.value})}
                         className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 min-h-[100px]"
                       ></textarea>
                     </div>
@@ -1896,14 +1803,14 @@ export default function Admin() {
                           <td className="p-4 text-sm font-medium text-gray-900 dark:text-white w-1/3">{faq.question}</td>
                           <td className="p-4 text-sm text-gray-600 dark:text-gray-400 w-1/2">{faq.answer}</td>
                           <td className="p-4 text-sm flex items-center gap-2">
-                            <Button
+                            <Button 
                               variant="secondary"
                               size="sm"
                               onClick={() => handleEditFaq(faq)}
                               className="p-2 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
                               leftIcon={<Edit2 className="w-4 h-4" />}
                             />
-                            <Button
+                            <Button 
                               variant="secondary"
                               size="sm"
                               onClick={() => handleDelete('faqs', faq.id)}
@@ -1950,56 +1857,54 @@ export default function Admin() {
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                       {usersList
-                        .filter(u =>
+                        .filter(u => 
                           (u.name?.toLowerCase() || '').includes(userSearchQuery.toLowerCase()) ||
                           (u.email?.toLowerCase() || '').includes(userSearchQuery.toLowerCase()) ||
                           (u.phone || '').includes(userSearchQuery)
                         )
                         .map(u => (
-                          <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
-                            <td className="p-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center font-bold">
-                                  {u.name ? u.name[0].toUpperCase() : 'U'}
-                                </div>
-                                <div className="text-sm font-medium text-gray-900 dark:text-white">{u.name || 'Noma\'lum'}</div>
+                        <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center font-bold">
+                                {u.name ? u.name[0].toUpperCase() : 'U'}
                               </div>
-                            </td>
-                            <td className="p-4 text-sm text-gray-600 dark:text-gray-400">{u.email}</td>
-                            <td className="p-4 text-sm text-gray-600 dark:text-gray-400">{u.phone || '-'}</td>
-                            <td className="p-4">
-                              <select
-                                value={u.role || 'user'}
-                                onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
-                                className="bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-lg text-xs font-medium px-2 py-1 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
-                              >
-                                <option value="user">{t('admin.users.role_user') || 'Foydalanuvchi'}</option>
-                                <option value="driver">{t('admin.users.role_driver') || 'Haydovchi'}</option>
-                                <option value="admin">{t('admin.users.role_admin') || 'Admin'}</option>
-                              </select>
-                            </td>
-                            <td className="p-4 text-sm flex items-center gap-2">
-                              {u.id !== user?.id && (
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => handleStartChatWithUser(u)}
-                                  className="p-2 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
-                                  leftIcon={<MessageCircle className="w-4 h-4" />}
-                                  title={t('admin.users.send_message') || "Xabar yozish"}
-                                />
-                              )}
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => handleDelete('users', u.id)}
-                                className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
-                                leftIcon={<Trash2 className="w-4 h-4" />}
-                                title="O'chirish"
-                              />
-                            </td>
-                          </tr>
-                        ))}
+                              <div className="text-sm font-medium text-gray-900 dark:text-white">{u.name || 'Noma\'lum'}</div>
+                            </div>
+                          </td>
+                          <td className="p-4 text-sm text-gray-600 dark:text-gray-400">{u.email}</td>
+                          <td className="p-4 text-sm text-gray-600 dark:text-gray-400">{u.phone || '-'}</td>
+                          <td className="p-4">
+                            <select 
+                              value={u.role || 'user'}
+                              onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
+                              className="bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-lg text-xs font-medium px-2 py-1 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                            >
+                              <option value="user">{t('admin.users.role_user') || 'Foydalanuvchi'}</option>
+                              <option value="driver">{t('admin.users.role_driver') || 'Haydovchi'}</option>
+                              <option value="admin">{t('admin.users.role_admin') || 'Admin'}</option>
+                            </select>
+                          </td>
+                          <td className="p-4 text-sm flex items-center gap-2">
+                            <Button 
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleStartChatWithUser(u)}
+                              className="p-2 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
+                              leftIcon={<MessageCircle className="w-4 h-4" />}
+                              title={t('admin.users.send_message') || "Xabar yozish"}
+                            />
+                            <Button 
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleDelete('users', u.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                              leftIcon={<Trash2 className="w-4 h-4" />}
+                              title="O'chirish"
+                            />
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -2028,7 +1933,7 @@ export default function Admin() {
                       </div>
                       <div className="flex items-center gap-2">
                         {m.status === 'unread' && (
-                          <Button
+                          <Button 
                             variant="secondary"
                             size="sm"
                             loading={messageLoading === m.id}
@@ -2038,7 +1943,7 @@ export default function Admin() {
                             O'qilgan deb belgilash
                           </Button>
                         )}
-                        <Button
+                        <Button 
                           variant="secondary"
                           size="sm"
                           onClick={() => handleDelete('messages', m.id)}
@@ -2067,141 +1972,6 @@ export default function Admin() {
             </div>
           )}
 
-          {activeTab === 'newsletter' && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="text-sm text-gray-500 dark:text-gray-400">
-                    Jami: <span className="font-bold text-gray-900 dark:text-white">{filteredNewsletterSubscribers.length} ta</span>
-                  </div>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                  <div className="relative w-full sm:w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Email yoki user ID..."
-                      value={newsletterSearchQuery}
-                      onChange={(e) => setNewsletterSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 bg-white dark:bg-[#111827] border border-gray-200 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                  </div>
-                  <Button
-                    onClick={() => setShowNewsletterForm(!showNewsletterForm)}
-                    className="px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-semibold rounded-xl h-auto"
-                    leftIcon={showNewsletterForm ? <X className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
-                  >
-                    {showNewsletterForm ? "Bekor qilish" : "Xabar yozish"}
-                  </Button>
-                  <Button
-                    onClick={handleDownloadNewsletterExcel}
-                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-xl h-auto"
-                    leftIcon={<Mail className="w-4 h-4" />}
-                  >
-                    Excel yuklab olish
-                  </Button>
-                </div>
-              </div>
-
-              {showNewsletterForm && (
-                <div className="bg-white dark:bg-[#111827] rounded-3xl shadow-xl border border-gray-100 dark:border-white/5 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
-                  <div className="p-6 border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-white/5 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center">
-                        <Mail className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Yangi xabar yaratish</h3>
-                        <p className="text-xs text-gray-500">{filteredNewsletterSubscribers.length} ta obunachiga yuboriladi</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-6 space-y-6">
-                    <div className="space-y-4">
-                      {/* Subject */}
-                      <div className="relative group">
-                        <label className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1 block ml-1">Subject / Mavzu</label>
-                        <input
-                          type="text"
-                          value={newsletterForm.subject}
-                          onChange={(e) => setNewsletterForm({ ...newsletterForm, subject: e.target.value })}
-                          placeholder="Gmail kabi mavzu kiriting..."
-                          className="w-full px-5 py-4 bg-gray-50 dark:bg-[#0B1120] border border-gray-200 dark:border-white/10 rounded-2xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all placeholder:text-gray-400"
-                        />
-                      </div>
-
-                      {/* Content */}
-                      <div className="relative group">
-                        <label className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1 block ml-1">Context / Xabar matni</label>
-                        <textarea
-                          value={newsletterForm.content}
-                          onChange={(e) => setNewsletterForm({ ...newsletterForm, content: e.target.value })}
-                          placeholder="Xabar matnini bu yerga yozing..."
-                          rows={8}
-                          className="w-full px-5 py-4 bg-gray-50 dark:bg-[#0B1120] border border-gray-200 dark:border-white/10 rounded-2xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all resize-none placeholder:text-gray-400"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end gap-3 pt-2">
-                      <Button
-                        variant="secondary"
-                        onClick={() => setShowNewsletterForm(false)}
-                        className="px-6 py-3 rounded-xl border-gray-200 dark:border-white/10"
-                      >
-                        Bekor qilish
-                      </Button>
-                      <Button
-                        onClick={handleSendNewsletter}
-                        loading={formLoading}
-                        disabled={!newsletterForm.subject || !newsletterForm.content}
-                        className="px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20"
-                        leftIcon={<Plus className="w-5 h-5 rotate-45" />}
-                      >
-                        Yuborish
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="bg-white dark:bg-[#111827] rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-gray-50 dark:bg-white/5 border-b border-gray-100 dark:border-white/5">
-                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Email</th>
-                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Sana</th>
-                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Manba</th>
-                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">User ID</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                      {filteredNewsletterSubscribers.map((subscriber: any) => (
-                        <tr key={subscriber.id} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
-                          <td className="p-4 text-sm font-medium text-gray-900 dark:text-white">{subscriber.email || '-'}</td>
-                          <td className="p-4 text-sm text-gray-600 dark:text-gray-400">
-                            {subscriber.createdAt ? new Date(subscriber.createdAt).toLocaleString('uz-UZ') : '-'}
-                          </td>
-                          <td className="p-4 text-sm text-gray-600 dark:text-gray-400">{subscriber.source || '-'}</td>
-                          <td className="p-4 text-xs text-gray-500 dark:text-gray-400">{subscriber.userId || '-'}</td>
-                        </tr>
-                      ))}
-                      {filteredNewsletterSubscribers.length === 0 && (
-                        <tr>
-                          <td className="p-8 text-center text-gray-500 dark:text-gray-400" colSpan={4}>
-                            Hozircha obunachilar yo'q.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
           {activeTab === 'chats' && (
             <div className="flex-1 flex flex-col min-h-0 space-y-6">
               <div className="flex items-center justify-between md:hidden flex-shrink-0">
@@ -2224,18 +1994,18 @@ export default function Admin() {
                     </div>
                   </div>
                   <div className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-white/5">
-                    {chats
-                      .filter(chat =>
-                        (chat.userName || '').toLowerCase().includes(chatSearchQuery.toLowerCase()) ||
-                        (chat.userEmail || '').toLowerCase().includes(chatSearchQuery.toLowerCase())
-                      )
-                      .sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
-                      .map(chat => (
+                      {chats
+                        .filter(chat => 
+                          (chat.userName || '').toLowerCase().includes(chatSearchQuery.toLowerCase()) ||
+                          (chat.userEmail || '').toLowerCase().includes(chatSearchQuery.toLowerCase())
+                        )
+                        .sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
+                        .map(chat => (
                         <Button
                           key={chat.id}
                           variant="secondary"
                           onClick={() => setSelectedChatId(chat.id)}
-                          className={`w-full p-4 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors border-0 border-b border-gray-50 dark:border-white/5 rounded-none h-auto justify-start ${selectedChatId === chat.id ? 'bg-emerald-50 dark:bg-emerald-500/10' : ''}`}
+                          className={`w-full p-4 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors border-0 border-b border-gray-50 dark:border-white/5 rounded-none h-auto justify-start group ${selectedChatId === chat.id ? 'bg-emerald-50 dark:bg-emerald-500/10' : ''}`}
                         >
                           <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center font-bold text-lg flex-shrink-0">
                             {chat.userName ? chat.userName[0].toUpperCase() : 'U'}
@@ -2249,11 +2019,25 @@ export default function Admin() {
                             </div>
                             <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{chat.lastMessage}</p>
                           </div>
-                          {chat.unreadCount > 0 && (
-                            <div className="w-5 h-5 bg-emerald-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center flex-shrink-0">
-                              {chat.unreadCount}
-                            </div>
-                          )}
+                          <div className="flex flex-col items-end gap-2">
+                            {chat.unreadCount > 0 && (
+                              <div className="w-5 h-5 bg-emerald-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center flex-shrink-0">
+                                {chat.unreadCount}
+                              </div>
+                            )}
+                            <button 
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (window.confirm("Haqiqatan ham ushbu suhbatni o'chirmoqchimisiz?")) {
+                                  await deleteDoc(doc(db, 'chats', chat.id));
+                                  if (selectedChatId === chat.id) setSelectedChatId(null);
+                                }
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </Button>
                       ))}
                     {chats.length === 0 && (
@@ -2311,10 +2095,11 @@ export default function Admin() {
                                     </>
                                   )}
                                 </span>
-                                <div className={`p-3 rounded-2xl text-sm shadow-sm ${isMe
-                                  ? 'bg-emerald-500 text-white rounded-tr-none'
-                                  : 'bg-white dark:bg-[#1F2937] text-gray-800 dark:text-gray-200 rounded-tl-none border border-gray-100 dark:border-white/5'
-                                  }`}>
+                                <div className={`p-3 rounded-2xl text-sm shadow-sm ${
+                                  isMe 
+                                    ? 'bg-emerald-500 text-white rounded-tr-none' 
+                                    : 'bg-white dark:bg-[#1F2937] text-gray-800 dark:text-gray-200 rounded-tl-none border border-gray-100 dark:border-white/5'
+                                }`}>
                                   <p className="whitespace-pre-wrap break-words">{msg.text}</p>
                                   <p className={`text-[10px] mt-1 ${isMe ? 'text-emerald-100' : 'text-gray-400'}`}>
                                     {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -2354,93 +2139,6 @@ export default function Admin() {
                     </div>
                   )}
                 </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'notifications' && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="hidden md:block" />
-                <Button
-                  onClick={() => setShowNotificationForm(!showNotificationForm)}
-                  className="flex items-center gap-2 w-fit"
-                  leftIcon={showNotificationForm ? <X className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-                >
-                  {showNotificationForm ? t('admin.notifications.cancel') : t('admin.notifications.new')}
-                </Button>
-              </div>
-
-              {showNotificationForm && (
-                <div className="bg-white dark:bg-[#111827] p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5">
-                  <h3 className="text-lg font-bold mb-4 text-gray-900 dark:text-white">{t('admin.notifications.form_title')}</h3>
-                  <form onSubmit={handleSendNotification} className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('admin.notifications.title_label')}</label>
-                      <input
-                        type="text"
-                        required
-                        value={notificationForm.title}
-                        onChange={e => setNotificationForm({ ...notificationForm, title: e.target.value })}
-                        className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
-                        placeholder={t('admin.notifications.title_label')}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('admin.notifications.message_label')}</label>
-                      <textarea
-                        required
-                        value={notificationForm.message}
-                        onChange={e => setNotificationForm({ ...notificationForm, message: e.target.value })}
-                        rows={4}
-                        className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
-                        placeholder={t('admin.notifications.message_label')}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('admin.notifications.target_label')}</label>
-                      <select
-                        value={notificationForm.target}
-                        onChange={e => setNotificationForm({ ...notificationForm, target: e.target.value as 'all' | 'newcomers' })}
-                        className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
-                      >
-                        <option value="all">{t('admin.notifications.target_all')}</option>
-                        <option value="newcomers">{t('admin.notifications.target_newcomers')}</option>
-                      </select>
-                    </div>
-                    <Button type="submit" loading={formLoading} className="h-auto">{t('admin.notifications.send')}</Button>
-                  </form>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 gap-4">
-                {notifications.map((notif) => (
-                  <div key={notif.id} className="bg-white dark:bg-[#111827] p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5">
-                    <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-bold text-gray-900 dark:text-white">{notif.title}</h4>
-                      <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase ${notif.target === 'all' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10' : 'bg-blue-100 text-blue-600 dark:bg-blue-500/10'}`}>
-                        {notif.target === 'all' ? 'Hamma' : 'Yangi kelganlar'}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{notif.message}</p>
-                    <div className="flex items-center justify-between text-[10px] text-gray-400">
-                      <span>{new Date(notif.createdAt).toLocaleString('uz-UZ')}</span>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setDeleteConfirm({ isOpen: true, collectionName: 'notifications', id: notif.id })}
-                        className="p-1 text-gray-400 hover:text-red-500 border-0 h-auto"
-                        leftIcon={<Trash2 className="w-3.5 h-3.5" />}
-                      />
-                    </div>
-                  </div>
-                ))}
-                {notifications.length === 0 && (
-                  <div className="text-center py-20 bg-white dark:bg-[#111827] rounded-2xl border border-dashed border-gray-200 dark:border-white/10">
-                    <Mail className="w-16 h-16 text-gray-300 dark:text-gray-700 mx-auto mb-4 opacity-20" />
-                    <p className="text-gray-500 dark:text-gray-400">{t('admin.notifications.empty')}</p>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -2489,14 +2187,15 @@ export default function Admin() {
                           </div>
                         </div>
                       </div>
-                      <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider ${review.status === 'approved' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' :
+                      <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider ${
+                        review.status === 'approved' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' :
                         review.status === 'pending' ? 'bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400' :
-                          'bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400'
-                        }`}>
+                        'bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400'
+                      }`}>
                         {review.status === 'approved' ? 'Tasdiqlangan' : review.status === 'pending' ? 'Kutilmoqda' : 'Rad etilgan'}
                       </span>
                     </div>
-
+                    
                     <p className="text-gray-600 dark:text-gray-400 text-sm italic mb-6 flex-grow">
                       "{review.comment}"
                     </p>
@@ -2556,148 +2255,129 @@ export default function Admin() {
 
           {activeTab === 'settings' && (
             <div className="space-y-6">
-              {/* Main Settings Card */}
               <div className="bg-white dark:bg-[#111827] p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5">
-                <div className="flex flex-col gap-8">
-                  {/* Card Settings Collapsible */}
-                  <div className="border border-gray-100 dark:border-white/5 rounded-2xl overflow-hidden bg-gray-50/30 dark:bg-[#0B1120]/10">
-                    <button
-                      onClick={() => setShowCardSettings(!showCardSettings)}
-                      className="w-full flex items-center justify-between p-6 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors border-0 h-auto"
-                    >
-                      <div className="flex items-center gap-3">
-                        <CreditCard className="w-6 h-6 text-emerald-500" />
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Karta sozlamalari</h3>
-                      </div>
-                      <ChevronRight className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${showCardSettings ? 'rotate-90' : ''}`} />
-                    </button>
+                <div className="flex items-center gap-3 mb-8">
+                  <CreditCard className="w-6 h-6 text-emerald-500" />
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Karta ma'lumotlari</h3>
+                </div>
 
-                    <AnimatePresence>
-                      {showCardSettings && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.3, ease: 'easeInOut' }}
-                        >
-                          <div className="p-6 border-t border-gray-100 dark:border-white/5 space-y-6">
-                            <div className="space-y-2">
-                              <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Karta raqami</label>
-                              <input
-                                type="text"
-                                value={adminCardNumber}
-                                onChange={handleCardNumberChange}
-                                maxLength={19}
-                                placeholder="0000 0000 0000 0000"
-                                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Karta egasi</label>
-                              <input
-                                type="text"
-                                value={adminCardOwner}
-                                onChange={(e) => setAdminCardOwner(e.target.value)}
-                                placeholder="Masalan: ALISHER UZAKOV"
-                                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                              />
-                            </div>
-                          </div>
-                        </motion.div>
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Karta raqami</label>
+                    <select
+                      value={adminCardNumber}
+                      onChange={(e) => setAdminCardNumber(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all appearance-none"
+                    >
+                      <option value="">Karta tanlang...</option>
+                      <option value="8600 1234 5678 9012">8600 1234 5678 9012 (Uzcard)</option>
+                      <option value="9860 1234 5678 9012">9860 1234 5678 9012 (Humo)</option>
+                      <option value="4200 1234 5678 9012">4200 1234 5678 9012 (Visa)</option>
+                      {adminCardNumber && !['8600 1234 5678 9012', '9860 1234 5678 9012', '4200 1234 5678 9012'].includes(adminCardNumber) && (
+                        <option value={adminCardNumber}>{adminCardNumber} (Joriy)</option>
                       )}
-                    </AnimatePresence>
+                    </select>
                   </div>
 
-                  {/* Other Settings */}
-                  <div className="space-y-6">
-                    <div className="space-y-2 opacity-60">
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Sayt Logotipi (Lokal)</label>
-                      <input
-                        type="text"
-                        value="/logo.png"
-                        disabled
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-[#0B1120] text-gray-500 cursor-not-allowed outline-none transition-all"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Hozirda tizim <code>public/logo.png</code> faylidan foydalanmoqda.</p>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Sayt Logotipi (URL)</label>
+                    <input
+                      type="text"
+                      value={logoUrl}
+                      onChange={(e) => setLogoUrl(e.target.value)}
+                      placeholder="https://example.com/logo.png"
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Ushbu URL orqali saytdagi barcha logotiplar va favicon o'zgaradi.</p>
+                    {logoUrl && (
                       <div className="mt-2 p-2 border border-gray-200 dark:border-white/10 rounded-lg inline-block bg-gray-50 dark:bg-[#0B1120]">
-                          <img src="/logo.png" alt="Logo Preview" className="h-10 object-contain" />
+                        <img src={logoUrl} alt="Logo Preview" className="h-10 object-contain" onError={(e) => (e.currentTarget.src = 'https://placehold.co/512x512/10b981/ffffff/png?text=Xato')} />
                       </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Qo'llab-quvvatlash telefoni</label>
-                      <input
-                        type="text"
-                        value={adminSupportPhone}
-                        onChange={(e) => setAdminSupportPhone(e.target.value)}
-                        placeholder="+998 90 000 00 00"
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Sayt tavsifi</label>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(siteDescription);
-                            toast.success("Tavsif nusxalandi");
-                          }}
-                          className="text-emerald-500 hover:text-emerald-600 flex items-center gap-1 text-xs font-medium"
-                        >
-                          <Copy className="w-3 h-3" />
-                          Nusxa olish
-                        </button>
-                      </div>
-                      <textarea
-                        value={siteDescription}
-                        onChange={(e) => setSiteDescription(e.target.value)}
-                        rows={4}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all resize-none"
-                      />
-                    </div>
-
-                    {/* Payment Toggles */}
-                    <div className="pt-4 space-y-4">
-                      <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#0B1120]/50 border border-gray-100 dark:border-white/5">
-                        <div>
-                          <div className="font-bold text-gray-900 dark:text-white">Stripe (Onlayn to'lov)</div>
-                          <div className="text-xs text-gray-500">Kredit/debit karta orqali onlayn to'lash</div>
-                        </div>
-                        <button
-                          onClick={() => setStripeEnabled(!stripeEnabled)}
-                          className={`w-12 h-6 rounded-full transition-colors relative ${stripeEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}
-                        >
-                          <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${stripeEnabled ? 'right-1' : 'left-1'}`} />
-                        </button>
-                      </div>
-
-                      <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#0B1120]/50 border border-gray-100 dark:border-white/5">
-                        <div>
-                          <div className="font-bold text-gray-900 dark:text-white">Karta orqali (Manual)</div>
-                          <div className="text-xs text-gray-500">O'tkazma qilib chek yuborish orqali to'lash</div>
-                        </div>
-                        <button
-                          onClick={() => setManualEnabled(!manualEnabled)}
-                          className={`w-12 h-6 rounded-full transition-colors relative ${manualEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}
-                        >
-                          <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${manualEnabled ? 'right-1' : 'left-1'}`} />
-                        </button>
-                      </div>
-                    </div>
-
-                    <Button
-                      onClick={handleUpdateSettings}
-                      loading={updatingSettings}
-                      className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg rounded-2xl"
-                    >
-                      Saqlash
-                    </Button>
+                    )}
                   </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Egasining ismi</label>
+                    <input
+                      type="text"
+                      value={adminCardOwner}
+                      onChange={(e) => setAdminCardOwner(e.target.value)}
+                      placeholder="ASLBEK QOZIBOYEV"
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Qo'llab-quvvatlash telefoni</label>
+                    <input
+                      type="text"
+                      value={adminSupportPhone}
+                      onChange={(e) => setAdminSupportPhone(e.target.value)}
+                      placeholder="+998 90 000 00 00"
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Sayt tavsifi</label>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(siteDescription);
+                          toast.success("Tavsif nusxalandi");
+                        }}
+                        className="text-emerald-500 hover:text-emerald-600 flex items-center gap-1 text-xs font-medium"
+                      >
+                        <Copy className="w-3 h-3" />
+                        Nusxa olish
+                      </button>
+                    </div>
+                    <textarea
+                      value={siteDescription}
+                      onChange={(e) => setSiteDescription(e.target.value)}
+                      rows={4}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all resize-none"
+                    />
+                  </div>
+
+                  <div className="pt-4 space-y-4">
+                    <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#0B1120]/50 border border-gray-100 dark:border-white/5">
+                      <div>
+                        <div className="font-bold text-gray-900 dark:text-white">Stripe (Onlayn to'lov)</div>
+                        <div className="text-xs text-gray-500">Kredit/debit karta orqali onlayn to'lash</div>
+                      </div>
+                      <button
+                        onClick={() => setStripeEnabled(!stripeEnabled)}
+                        className={`w-12 h-6 rounded-full transition-colors relative ${stripeEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+                      >
+                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${stripeEnabled ? 'right-1' : 'left-1'}`} />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#0B1120]/50 border border-gray-100 dark:border-white/5">
+                      <div>
+                        <div className="font-bold text-gray-900 dark:text-white">Karta orqali (Manual)</div>
+                        <div className="text-xs text-gray-500">O'tkazma qilib chek yuborish orqali to'lash</div>
+                      </div>
+                      <button
+                        onClick={() => setManualEnabled(!manualEnabled)}
+                        className={`w-12 h-6 rounded-full transition-colors relative ${manualEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+                      >
+                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${manualEnabled ? 'right-1' : 'left-1'}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={handleUpdateSettings}
+                    loading={updatingSettings}
+                    className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg rounded-2xl"
+                  >
+                    Saqlash
+                  </Button>
                 </div>
               </div>
 
-              {/* Dangerous Zone */}
               <div className="bg-white dark:bg-[#111827] p-6 rounded-2xl shadow-sm border border-red-100 dark:border-red-500/10">
                 <div className="flex items-center justify-between">
                   <div>
@@ -2716,7 +2396,6 @@ export default function Admin() {
               </div>
             </div>
           )}
-
           {activeTab === 'payments' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
@@ -2744,9 +2423,9 @@ export default function Admin() {
                         </div>
 
                         <div className="flex-1 flex justify-center">
-                          <a
-                            href={booking.receiptUrl}
-                            target="_blank"
+                          <a 
+                            href={booking.receiptUrl} 
+                            target="_blank" 
                             rel="noopener noreferrer"
                             className="group relative block w-32 h-20 rounded-lg overflow-hidden border border-gray-200 dark:border-white/10 hover:border-emerald-500 transition-all"
                           >
@@ -2796,100 +2475,341 @@ export default function Admin() {
               </div>
             </div>
           )}
+
+          {activeTab === 'newsletter' && (
+            <div className="space-y-8">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">{t('admin.newsletter.subscribers')}</h3>
+                  <p className="text-sm text-gray-500">Jami {subscribers.length} ta obunachi</p>
+                </div>
+                <Button
+                  onClick={exportSubscribersToExcel}
+                  variant="secondary"
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white border-0 h-auto py-2.5 px-6 rounded-xl font-bold shadow-lg shadow-emerald-500/20"
+                  leftIcon={<Database className="w-5 h-5" />}
+                >
+                  {t('admin.newsletter.export')}
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Send Newsletter Form */}
+                <div className="bg-white dark:bg-[#111827] p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5">
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-6">{t('admin.newsletter.send')}</h4>
+                  <form onSubmit={handleSendNewsletter} className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('admin.newsletter.subject')}</label>
+                      <input
+                        type="text"
+                        required
+                        value={newsletterForm.subject}
+                        onChange={(e) => setNewsletterForm({ ...newsletterForm, subject: e.target.value })}
+                        className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl py-3 px-4 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        placeholder="Yangi chegirmalar haqida..."
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('admin.newsletter.content')}</label>
+                      <textarea
+                        required
+                        rows={6}
+                        value={newsletterForm.content}
+                        onChange={(e) => setNewsletterForm({ ...newsletterForm, content: e.target.value })}
+                        className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl py-3 px-4 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                        placeholder="Xabar matnini kiriting..."
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      loading={formLoading}
+                      className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-emerald-500/20"
+                      leftIcon={<Send className="w-5 h-5" />}
+                    >
+                      {t('admin.newsletter.send')}
+                    </Button>
+                  </form>
+                </div>
+
+                {/* Newsletter History */}
+                <div className="bg-white dark:bg-[#111827] p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5">
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-6">{t('admin.newsletter.history')}</h4>
+                  <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                    {newsletters.length > 0 ? (
+                      newsletters.map((nl, idx) => (
+                        <div key={idx} className="p-4 bg-gray-50 dark:bg-white/5 rounded-xl border border-gray-100 dark:border-white/5">
+                          <div className="flex justify-between items-start mb-2">
+                            <h5 className="font-bold text-gray-900 dark:text-white">{nl.subject}</h5>
+                            <span className="text-[10px] text-gray-400 uppercase font-bold">{new Date(nl.sentAt).toLocaleDateString()}</span>
+                          </div>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-2">{nl.content}</p>
+                          <div className="text-[10px] text-emerald-500 font-bold uppercase tracking-wider">
+                            {nl.recipientCount} ta obunachiga yuborildi
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-12 text-gray-500">
+                        Hozircha yuborilgan xabarlar yo'q.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Subscribers List Table */}
+              <div className="bg-white dark:bg-[#111827] rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-white/5 border-b border-gray-100 dark:border-white/5">
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Email</th>
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Sana</th>
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Foydalanuvchi ID</th>
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Holati</th>
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Amallar</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                      {subscribers.map((sub) => (
+                        <tr key={sub.id} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                          <td className="p-4 text-sm font-medium text-gray-900 dark:text-white">{sub.email}</td>
+                          <td className="p-4 text-sm text-gray-500">{new Date(sub.subscribedAt).toLocaleString()}</td>
+                          <td className="p-4 text-sm text-gray-500 font-mono">{sub.userId || 'Guest'}</td>
+                          <td className="p-4">
+                            <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                              sub.status === 'active' ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400'
+                            }`}>
+                              {sub.status === 'active' ? 'Faol' : 'Bekor qilingan'}
+                            </span>
+                          </td>
+                          <td className="p-4">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleDelete('subscribers', sub.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                              leftIcon={<Trash2 className="w-4 h-4" />}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'notifications' && (
+            <div className="space-y-8">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">{t('admin.notifications')}</h3>
+                  <p className="text-sm text-gray-500">Jami {notifications.length} ta bildirishnoma yuborilgan</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Send Notification Form */}
+                <div className="bg-white dark:bg-[#111827] p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5">
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-6">{t('admin.notifications.send')}</h4>
+                  <form onSubmit={handleSendNotification} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('admin.notifications.title')}</label>
+                        <input
+                          type="text"
+                          required
+                          value={notificationForm.title}
+                          onChange={(e) => setNotificationForm({ ...notificationForm, title: e.target.value })}
+                          className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl py-3 px-4 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          placeholder="Bildirishnoma nomi"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('admin.notifications.type')}</label>
+                        <select
+                          value={notificationForm.type}
+                          onChange={(e) => setNotificationForm({ ...notificationForm, type: e.target.value })}
+                          className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl py-3 px-4 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        >
+                          <option value="info">Ma'lumot</option>
+                          <option value="promo">Aksiya</option>
+                          <option value="alert">Ogohlantirish</option>
+                          <option value="update">Yangilanish</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('admin.notifications.target')}</label>
+                      <select
+                        value={notificationForm.target}
+                        onChange={(e) => setNotificationForm({ ...notificationForm, target: e.target.value })}
+                        className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl py-3 px-4 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      >
+                        <option value="all">{t('admin.notifications.target.all')}</option>
+                        <option value="new">{t('admin.notifications.target.new')}</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('admin.notifications.details')}</label>
+                      <textarea
+                        required
+                        rows={4}
+                        value={notificationForm.details}
+                        onChange={(e) => setNotificationForm({ ...notificationForm, details: e.target.value })}
+                        className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl py-3 px-4 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                        placeholder="Batafsil ma'lumot..."
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      loading={formLoading}
+                      className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-emerald-500/20"
+                      leftIcon={<Send className="w-5 h-5" />}
+                    >
+                      {t('admin.notifications.send')}
+                    </Button>
+                  </form>
+                </div>
+
+                {/* Notification History */}
+                <div className="bg-white dark:bg-[#111827] p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5">
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-6">{t('admin.notifications.history')}</h4>
+                  <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                    {notifications.length > 0 ? (
+                      notifications.map((n, idx) => (
+                        <div key={idx} className="p-4 bg-gray-50 dark:bg-white/5 rounded-xl border border-gray-100 dark:border-white/5">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <h5 className="font-bold text-gray-900 dark:text-white">{n.title}</h5>
+                              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                n.type === 'alert' ? 'bg-red-100 text-red-600' :
+                                n.type === 'promo' ? 'bg-amber-100 text-amber-600' :
+                                n.type === 'update' ? 'bg-blue-100 text-blue-600' :
+                                'bg-emerald-100 text-emerald-600'
+                              }`}>
+                                {n.type}
+                              </span>
+                            </div>
+                            <div className="flex flex-col items-end gap-2">
+                              <span className="text-[10px] text-gray-400 uppercase font-bold">{new Date(n.createdAt).toLocaleDateString()}</span>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => handleDelete('notifications', n.id)}
+                                className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg border-0"
+                                leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+                              />
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{n.details}</p>
+                          <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">
+                            Target: {n.target === 'all' ? t('admin.notifications.target.all') : t('admin.notifications.target.new')}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-12 text-gray-500">
+                        Hozircha yuborilgan bildirishnomalar yo'q.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
 
       {/* Bookings Modal */}
-      {
-        selectedRideForBookings && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white dark:bg-[#111827] w-full max-w-2xl rounded-2xl shadow-2xl border border-gray-100 dark:border-white/5 overflow-hidden flex flex-col max-h-[90vh]">
-              <div className="p-6 border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Yo'lovchilar ro'yxati</h3>
-                  <p className="text-sm text-gray-500">{selectedRideForBookings.from} → {selectedRideForBookings.to} ({selectedRideForBookings.departureTime})</p>
-                </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setSelectedRideForBookings(null)}
-                  className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-full transition-colors"
-                  leftIcon={<X className="w-6 h-6 text-gray-500" />}
-                />
+      {selectedRideForBookings && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#111827] w-full max-w-2xl rounded-2xl shadow-2xl border border-gray-100 dark:border-white/5 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Yo'lovchilar ro'yxati</h3>
+                <p className="text-sm text-gray-500">{selectedRideForBookings.from} → {selectedRideForBookings.to} ({selectedRideForBookings.departureTime})</p>
               </div>
-              <div className="flex-1 overflow-y-auto p-6">
-                <div className="space-y-4">
-                  {bookings.filter(b => b.rideId === selectedRideForBookings.id).length > 0 ? (
-                    bookings.filter(b => b.rideId === selectedRideForBookings.id).map((booking, idx) => {
-                      const passenger = usersList.find(u => u.id === booking.userId);
-                      return (
-                        <div key={booking.id || idx} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-white/5 rounded-xl border border-gray-100 dark:border-white/5">
-                          <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center font-bold">
-                              {passenger?.name?.[0].toUpperCase() || 'U'}
-                            </div>
-                            <div>
-                              <h4 className="font-bold text-gray-900 dark:text-white">{passenger?.name || 'Noma\'lum foydalanuvchi'}</h4>
-                              <p className="text-xs text-gray-500">{passenger?.email || 'Email mavjud emas'}</p>
-                            </div>
+              <Button 
+                variant="secondary"
+                size="sm"
+                onClick={() => setSelectedRideForBookings(null)} 
+                className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-full transition-colors"
+                leftIcon={<X className="w-6 h-6 text-gray-500" />}
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-4">
+                {bookings.filter(b => b.rideId === selectedRideForBookings.id).length > 0 ? (
+                  bookings.filter(b => b.rideId === selectedRideForBookings.id).map((booking, idx) => {
+                    const passenger = usersList.find(u => u.id === booking.userId);
+                    return (
+                      <div key={booking.id || idx} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-white/5 rounded-xl border border-gray-100 dark:border-white/5">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center font-bold">
+                            {passenger?.name?.[0].toUpperCase() || 'U'}
                           </div>
-                          <div className="text-right">
-                            <div className="text-sm font-bold text-emerald-500">{booking.seatNumber}-o'rindiq</div>
-                            <div className="text-[10px] text-gray-400 uppercase font-bold">{booking.status}</div>
+                          <div>
+                            <h4 className="font-bold text-gray-900 dark:text-white">{passenger?.name || 'Noma\'lum foydalanuvchi'}</h4>
+                            <p className="text-xs text-gray-500">{passenger?.email || 'Email mavjud emas'}</p>
                           </div>
                         </div>
-                      );
-                    })
-                  ) : (
-                    <div className="text-center py-12 text-gray-500">
-                      Bu qatnov uchun hali chiptalar sotilmagan.
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="p-6 border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-white/5 flex justify-between items-center">
-                <div className="text-sm text-gray-500">
-                  Jami: <span className="font-bold text-gray-900 dark:text-white">{bookings.filter(b => b.rideId === selectedRideForBookings.id).length} ta yo'lovchi</span>
-                </div>
-                <Button
-                  onClick={() => setSelectedRideForBookings(null)}
-                  className="px-6 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl font-bold text-sm"
-                >
-                  Yopish
-                </Button>
+                        <div className="text-right">
+                          <div className="text-sm font-bold text-emerald-500">{booking.seatNumber}-o'rindiq</div>
+                          <div className="text-[10px] text-gray-400 uppercase font-bold">{booking.status}</div>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-12 text-gray-500">
+                    Bu qatnov uchun hali chiptalar sotilmagan.
+                  </div>
+                )}
               </div>
             </div>
+            <div className="p-6 border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-white/5 flex justify-between items-center">
+              <div className="text-sm text-gray-500">
+                Jami: <span className="font-bold text-gray-900 dark:text-white">{bookings.filter(b => b.rideId === selectedRideForBookings.id).length} ta yo'lovchi</span>
+              </div>
+              <Button 
+                onClick={() => setSelectedRideForBookings(null)}
+                className="px-6 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl font-bold text-sm"
+              >
+                Yopish
+              </Button>
+            </div>
           </div>
-        )
-      }
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
-      {
-        deleteConfirm.isOpen && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-white dark:bg-[#111827] rounded-2xl p-6 max-w-sm w-full shadow-xl border border-gray-200 dark:border-white/10">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">O'chirishni tasdiqlaysizmi?</h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">Bu amalni ortga qaytarib bo'lmaydi.</p>
-              <div className="flex gap-3 justify-end">
-                <Button
-                  variant="secondary"
-                  onClick={() => setDeleteConfirm({ isOpen: false, collectionName: '', id: '' })}
-                  className="px-4 py-2 text-gray-600 dark:text-gray-400 font-medium hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors"
-                >
-                  Bekor qilish
-                </Button>
-                <Button
-                  onClick={confirmDelete}
-                  loading={formLoading}
-                  className="px-4 py-2 bg-red-600 text-white font-medium hover:bg-red-700 rounded-xl transition-colors h-auto"
-                >
-                  O'chirish
-                </Button>
-              </div>
+      {deleteConfirm.isOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-[#111827] rounded-2xl p-6 max-w-sm w-full shadow-xl border border-gray-200 dark:border-white/10">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">O'chirishni tasdiqlaysizmi?</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">Bu amalni ortga qaytarib bo'lmaydi.</p>
+            <div className="flex gap-3 justify-end">
+              <Button 
+                variant="secondary"
+                onClick={() => setDeleteConfirm({ isOpen: false, collectionName: '', id: '' })}
+                className="px-4 py-2 text-gray-600 dark:text-gray-400 font-medium hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors"
+              >
+                Bekor qilish
+              </Button>
+              <Button 
+                onClick={confirmDelete}
+                loading={formLoading}
+                className="px-4 py-2 bg-red-600 text-white font-medium hover:bg-red-700 rounded-xl transition-colors h-auto"
+              >
+                O'chirish
+              </Button>
             </div>
           </div>
-        )
-      }
-    </div >
+        </div>
+      )}
+    </div>
   );
 }
