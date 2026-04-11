@@ -268,7 +268,7 @@ async function startServer() {
       },
     },
     crossOriginEmbedderPolicy: false,
-    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+    crossOriginOpenerPolicy: false,
     referrerPolicy: { policy: "no-referrer-when-downgrade" },
   }));
 
@@ -283,7 +283,7 @@ async function startServer() {
 
   // Security Headers for Firebase Auth and Popups
   app.use((req, res, next) => {
-    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    res.setHeader('Cross-Origin-Opener-Policy', 'unsafe-none');
     res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
     next();
   });
