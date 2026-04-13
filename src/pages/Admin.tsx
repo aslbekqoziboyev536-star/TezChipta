@@ -73,6 +73,8 @@ export default function Admin() {
   const [myDriverId, setMyDriverId] = useState<string | null>(null);
   const [selectedRideForBookings, setSelectedRideForBookings] = useState<any | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingMessageText, setEditingMessageText] = useState('');
 
   // Form states
   const [showFaqForm, setShowFaqForm] = useState(false);
@@ -284,19 +286,37 @@ export default function Admin() {
     const { collectionName, id } = deleteConfirm;
     setFormLoading(true);
     try {
-      try {
-        await deleteDoc(doc(db, collectionName, id));
-      } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, `${collectionName}/${id}`);
+      if (collectionName === 'users') {
+        const idToken = await auth.currentUser?.getIdToken();
+        const response = await fetch('/api/admin/delete-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
+          body: JSON.stringify({ uid: id })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+        toast.success(result.message);
+        setUsersList(usersList.filter(u => u.id !== id));
+      } else {
+        try {
+          await deleteDoc(doc(db, collectionName, id));
+        } catch (err) {
+          handleFirestoreError(err, OperationType.DELETE, `${collectionName}/${id}`);
+          return;
+        }
+        if (collectionName === 'rides') setRides(rides.filter(r => r.id !== id));
+        if (collectionName === 'drivers') setDrivers(drivers.filter(d => d.id !== id));
+        if (collectionName === 'faqs') setFaqs(faqs.filter(f => f.id !== id));
+        if (collectionName === 'messages') setMessages(messages.filter(m => m.id !== id));
+        toast.success("O'chirildi");
       }
-      if (collectionName === 'rides') setRides(rides.filter(r => r.id !== id));
-      if (collectionName === 'drivers') setDrivers(drivers.filter(d => d.id !== id));
-      if (collectionName === 'faqs') setFaqs(faqs.filter(f => f.id !== id));
-      if (collectionName === 'users') setUsersList(usersList.filter(u => u.id !== id));
-      if (collectionName === 'messages') setMessages(messages.filter(m => m.id !== id));
       setDeleteConfirm({ isOpen: false, collectionName: '', id: '' });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting document:", error);
+      toast.error(error.message || "O'chirishda xatolik yuz berdi");
     } finally {
       setFormLoading(false);
     }
@@ -840,6 +860,33 @@ export default function Admin() {
       console.error("Error sending admin message:", error);
     } finally {
       setChatLoading(false);
+    }
+  };
+
+  const handleDeleteChatMessage = async (messageId: string) => {
+    if (!selectedChatId || !window.confirm("Ushbu xabarni o'chirmoqchimisiz?")) return;
+    try {
+      await deleteDoc(doc(db, 'chats', selectedChatId, 'messages', messageId));
+      toast.success("Xabar o'chirildi");
+    } catch (error) {
+      console.error("Error deleting message:", error);
+      toast.error("Xabarni o'chirishda xatolik yuz berdi");
+    }
+  };
+
+  const handleUpdateChatMessage = async (messageId: string) => {
+    if (!selectedChatId || !editingMessageText.trim()) return;
+    try {
+      await updateDoc(doc(db, 'chats', selectedChatId, 'messages', messageId), {
+        text: editingMessageText.trim(),
+        updatedAt: new Date().toISOString()
+      });
+      setEditingMessageId(null);
+      setEditingMessageText('');
+      toast.success("Xabar yangilandi");
+    } catch (error) {
+      console.error("Error updating message:", error);
+      toast.error("Xabarni yangilashda xatolik yuz berdi");
     }
   };
 
@@ -2094,15 +2141,69 @@ export default function Admin() {
                                     </>
                                   )}
                                 </span>
-                                <div className={`p-3 rounded-2xl text-sm shadow-sm ${
+                                <div className={`p-3 rounded-2xl text-sm shadow-sm group/msg relative ${
                                   isMe 
                                     ? 'bg-emerald-500 text-white rounded-tr-none' 
                                     : 'bg-white dark:bg-[#1F2937] text-gray-800 dark:text-gray-200 rounded-tl-none border border-gray-100 dark:border-white/5'
                                 }`}>
-                                  <p className="whitespace-pre-wrap break-words">{msg.text}</p>
-                                  <p className={`text-[10px] mt-1 ${isMe ? 'text-emerald-100' : 'text-gray-400'}`}>
-                                    {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                  </p>
+                                  {editingMessageId === msg.id ? (
+                                    <div className="flex flex-col gap-2 min-w-[200px]">
+                                      <textarea
+                                        value={editingMessageText}
+                                        onChange={(e) => setEditingMessageText(e.target.value)}
+                                        className="w-full bg-emerald-600 dark:bg-[#0B1120] text-white border-0 rounded-lg p-2 text-sm focus:ring-1 focus:ring-white outline-none resize-none"
+                                        rows={3}
+                                        autoFocus
+                                      />
+                                      <div className="flex justify-end gap-2">
+                                        <button 
+                                          onClick={() => setEditingMessageId(null)}
+                                          className="text-[10px] uppercase font-bold hover:underline"
+                                        >
+                                          Bekor qilish
+                                        </button>
+                                        <button 
+                                          onClick={() => handleUpdateChatMessage(msg.id)}
+                                          className="text-[10px] uppercase font-bold bg-white text-emerald-600 px-2 py-1 rounded hover:bg-emerald-50"
+                                        >
+                                          Saqlash
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                                      <div className={`flex items-center gap-2 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                        {msg.updatedAt && (
+                                          <span className="text-[9px] opacity-70 italic">tahrirlandi</span>
+                                        )}
+                                        <p className={`text-[10px] ${isMe ? 'text-emerald-100' : 'text-gray-400'}`}>
+                                          {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </p>
+                                      </div>
+                                      
+                                      {/* Message Actions */}
+                                      <div className={`absolute -top-2 ${isMe ? '-left-8' : '-right-8'} opacity-0 group-hover/msg:opacity-100 transition-opacity flex flex-col gap-1 bg-white dark:bg-[#111827] border border-gray-100 dark:border-white/10 rounded-lg shadow-lg p-1 z-10`}>
+                                        <button 
+                                          onClick={() => {
+                                            setEditingMessageId(msg.id);
+                                            setEditingMessageText(msg.text);
+                                          }}
+                                          className="p-1.5 text-gray-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-md transition-colors"
+                                          title="Tahrirlash"
+                                        >
+                                          <Edit2 className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button 
+                                          onClick={() => handleDeleteChatMessage(msg.id)}
+                                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-colors"
+                                          title="O'chirish"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                             </div>

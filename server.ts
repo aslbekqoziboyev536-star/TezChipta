@@ -492,6 +492,48 @@ async function startServer() {
     }
   });
 
+  // Delete User (Admin Only)
+  app.post("/api/admin/delete-user", verifyAdmin, async (req, res) => {
+    const { uid } = req.body;
+    if (!uid) {
+      return res.status(400).json({ error: "Foydalanuvchi UID talab qilinadi" });
+    }
+
+    try {
+      if (!auth) throw new Error("Firebase Auth not initialized");
+      
+      // Get user info to check if they are an admin
+      const userToAuth = await auth.getUser(uid);
+      const adminEmails = ['qoziboyevaslbek359@gmail.com', 'admin@tezchipta.uz'];
+      
+      if (adminEmails.includes(userToAuth.email || '')) {
+        return res.status(403).json({ error: "Adminni o'chirib bo'lmaydi" });
+      }
+
+      // 1. Delete from Firebase Auth
+      await auth.deleteUser(uid);
+      console.log("User deleted from Firebase Auth:", uid);
+
+      // 2. Delete from Firestore users collection
+      const userRef = clientDoc(clientDb, 'users', uid);
+      await deleteClientDoc(userRef);
+      console.log("User document deleted from Firestore:", uid);
+
+      // 3. Delete from Firestore drivers collection if exists
+      const driversRef = clientCollection(clientDb, 'drivers');
+      const driverQuerySnapshot = await getClientDocs(clientQuery(driversRef, clientWhere('uid', '==', uid)));
+      for (const driverDoc of driverQuerySnapshot.docs) {
+        await deleteClientDoc(driverDoc.ref);
+        console.log("Related driver document deleted:", driverDoc.id);
+      }
+
+      res.json({ success: true, message: "Foydalanuvchi to'liq o'chirildi" });
+    } catch (error: any) {
+      console.error("Error deleting user:", error);
+      res.status(500).json({ error: error.message || "Foydalanuvchini o'chirishda xatolik yuz berdi" });
+    }
+  });
+
   // Verify Google ID Token
   app.post("/api/auth/google/verify", async (req, res) => {
     const { credential } = req.body;
