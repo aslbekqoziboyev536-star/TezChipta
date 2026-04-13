@@ -116,6 +116,14 @@ const errorList: ErrorItem[] = [
 
 
 export default function Errors() {
+  const [searchTerm, setSearchTerm] = React.useState('');
+
+  const filteredErrors = errorList.filter(error => 
+    error.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    error.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    error.description.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="min-h-screen bg-white dark:bg-[#0B1120] transition-colors duration-300">
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex justify-between items-center border-b border-gray-100 dark:border-white/5">
@@ -132,23 +140,36 @@ export default function Errors() {
       </nav>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="text-center mb-16">
+        <div className="text-center mb-12">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-red-500/10 text-red-500 mb-6">
             <AlertCircle className="w-8 h-8" />
           </div>
           <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">Error Help Center</h1>
-          <p className="text-gray-600 dark:text-gray-400">Find explanations and solutions for common error codes.</p>
+          <p className="text-gray-600 dark:text-gray-400 mb-8">Find explanations and solutions for common error codes.</p>
+          
+          {/* Search Bar */}
+          <div className="relative max-w-lg mx-auto">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Qidiruv (xatolik nomi yoki kodi)..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-12 pr-4 py-4 bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white transition-all shadow-sm"
+            />
+          </div>
         </div>
 
         <div className="grid gap-6">
-          {errorList.map((error, index) => (
-            <motion.div
-              key={error.code}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="bg-gray-50 dark:bg-white/5 rounded-3xl p-6 border border-gray-100 dark:border-white/10"
-            >
+          {filteredErrors.length > 0 ? (
+            filteredErrors.map((error, index) => (
+              <motion.div
+                key={error.code}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+                className="bg-gray-50 dark:bg-white/5 rounded-3xl p-6 border border-gray-100 dark:border-white/10 hover:border-emerald-500/30 transition-all"
+              >
               <div className="flex items-start gap-4">
                 <div className="p-3 bg-white dark:bg-[#111827] rounded-2xl shadow-sm">
                   {error.icon}
@@ -166,10 +187,21 @@ export default function Errors() {
                       <span className="font-bold">Solution:</span> {error.solution}
                     </p>
                   </div>
+                  </div>
                 </div>
-              </div>
+              </motion.div>
+            ))
+          ) : (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-20"
+            >
+              <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Xatolik topilmadi</h3>
+              <p className="text-gray-500">Qidiruvingizga mos keladigan xatolik kodi yoki nomi mavjud emas.</p>
             </motion.div>
-          ))}
+          )}
         </div>
 
         <div className="mt-16 p-8 bg-emerald-500 rounded-3xl text-white text-center">
