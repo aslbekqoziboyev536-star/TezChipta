@@ -10,8 +10,9 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { useAsync } from '../hooks/useAsync';
 import { SafeImage } from '../components/SafeImage';
 
-import { getFirebaseErrorMessage } from '../utils/firebaseErrors';
+import { getAuthErrorMessage } from '../utils/authErrors';
 import { toast } from 'sonner';
+import { AlertCircle } from 'lucide-react';
 
 export default function Register() {
   const { t } = useLanguage();
@@ -51,7 +52,7 @@ export default function Register() {
       });
     } catch (err: any) {
       console.error("Registration error:", err);
-      toast.error(getFirebaseErrorMessage(err) || "An error occurred during registration.");
+      toast.error(getAuthErrorMessage(err));
     }
   };
 
@@ -84,12 +85,24 @@ export default function Register() {
         <div className="bg-white dark:bg-[#111827] py-6 sm:py-8 px-4 shadow-xl sm:rounded-2xl sm:px-10 border border-gray-200 dark:border-white/5">
           <form className="space-y-6" onSubmit={handleRegister}>
             {error && (
-              <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 px-4 py-3 rounded-xl text-sm flex flex-col gap-1">
-                <span>{error}</span>
-                <Link to="/errors" className="text-xs underline hover:opacity-80">
-                  Check Error Help Center for solutions
-                </Link>
-              </div>
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 p-4 rounded-2xl text-sm flex gap-3 items-start overflow-hidden shadow-sm shadow-red-500/5 mb-2"
+              >
+                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                <div className="flex flex-col gap-2">
+                  <span className="font-semibold">{getAuthErrorMessage(error)}</span>
+                  {error.toString().includes('registered') && (
+                    <Link to="/login" className="text-xs font-bold underline flex items-center gap-1 hover:opacity-80 transition-opacity">
+                      Tizimga kirish sahifasiga o'tish
+                    </Link>
+                  )}
+                  <Link to="/errors" className="text-[10px] opacity-70 underline hover:opacity-100">
+                    Xatoliklar markazidan yordam olish
+                  </Link>
+                </div>
+              </motion.div>
             )}
 
             <div>
