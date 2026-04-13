@@ -11,8 +11,9 @@ import {
   ConfirmationResult,
   User as FirebaseUser
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, getDocFromServer, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, getDoc, getDocFromServer, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase';
+import { supabase } from '../lib/supabase';
 
 interface User {
   id: string;
@@ -138,9 +139,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        const sbUser = session.user;
+        const userDocRef = doc(db, 'users', sbUser.id);
+        
+        // Parallel fetch/sync for Supabase users
+        const docSnap = await getDoc(userDocRef);
+        if (!docSnap.exists()) {
+          await setDoc(userDocRef, {
+            name: sbUser.user_metadata.full_name || 'User',
+            email: sbUser.email,
+            role: 'user',
+            isProfileComplete: false,
+            createdAt: new Date().toISOString()
+          });
+        }
+        
+        // Update state
+        setUser({
+          id: sbUser.id,
+          name: sbUser.user_metadata.full_name || 'User',
+          email: sbUser.email || '',
+          role: 'user', // Default or fetch from doc
+          isProfileComplete: docSnap.exists() ? docSnap.data().isProfileComplete : false
+        } as User);
+        setLoading(false);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+      }
+    });
+
     return () => {
       unsubscribeAuth();
       if (unsubscribeSnapshot) unsubscribeSnapshot();
+      subscription.unsubscribe();
     };
   }, []);
 
@@ -157,7 +190,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithEmail = async (email: string, pass: string) => {
     try {
-      await signInWithEmailAndPassword(auth, email, pass);
+      // Try Supabase first
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password: pass,
+      });
+
+      if (error) {
+        // If Supabase fails, try Firebase fallback for older users
+        console.log("Supabase login failed, trying Firebase fallback...");
+        await signInWithEmailAndPassword(auth, email, pass);
+      }
     } catch (error) {
       console.error("Email login failed:", error);
       throw error;
@@ -166,29 +209,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const registerWithEmail = async (email: string, pass: string, name: string) => {
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-      const firebaseUser = userCredential.user;
+      // Use Supabase for registration to support email confirmation
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password: pass,
+        options: {
+          data: {
+            full_name: name,
+          },
+          emailRedirectTo: `${window.location.origin}/successful`
+        }
+      });
+
+      if (error) throw error;
       
-      // Perform profile update and Firestore write in parallel for speed
-      await Promise.all([
-        updateProfile(firebaseUser, { displayName: name }),
-        setDoc(doc(db, 'users', firebaseUser.uid), {
+      // Still create a document in Firestore to keep the app functional
+      if (data.user) {
+        await setDoc(doc(db, 'users', data.user.id), {
           name,
           email,
           role: 'user',
           isProfileComplete: false,
           createdAt: new Date().toISOString()
-        })
-      ]);
-
-      // Manually set the user state to avoid waiting for onAuthStateChanged to sync
-      setUser({
-        id: firebaseUser.uid,
-        name,
-        email,
-        picture: firebaseUser.photoURL || undefined,
-        role: 'user'
-      });
+        });
+      }
+      
+      // If email confirmation is enabled, Supabase won't sign in the user immediately.
+      // We will show a success message in the component.
     } catch (error) {
       console.error("Registration failed:", error);
       throw error;
@@ -217,7 +264,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      await signOut(auth);
+      await Promise.all([
+        signOut(auth),
+        supabase.auth.signOut()
+      ]);
     } catch (error) {
       console.error("Logout failed:", error);
     }

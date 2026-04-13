@@ -27,6 +27,7 @@ const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
 const TermsOfService = lazy(() => import('./pages/TermsOfService'));
 const PaymentSuccess = lazy(() => import('./pages/PaymentSuccess'));
 const Errors = lazy(() => import('./pages/Errors'));
+const Successful = lazy(() => import('./pages/Successful'));
 
 const PageLoader = () => (
   <div className="min-h-screen bg-gray-50 dark:bg-[#0B1120] flex items-center justify-center">
@@ -77,6 +78,7 @@ export default function App() {
                   <Route path="/privacy-policy" element={<PrivacyPolicy />} />
                   <Route path="/termsofservice" element={<TermsOfService />} />
                   <Route path="/errors" element={<Errors />} />
+                  <Route path="/successful" element={<Successful />} />
                 </Routes>
               </Suspense>
             </Router>

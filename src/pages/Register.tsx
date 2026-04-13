@@ -46,7 +46,9 @@ export default function Register() {
 
     try {
       await execute(() => registerWithEmail(email, password, name));
-      toast.success("Registration successful!");
+      toast.success("Muvaffaqiyatli ro'yxatdan o'tdingiz! Iltimos, pochtangizni tekshiring va havolani tasdiqlang.", {
+        duration: 8000
+      });
     } catch (err: any) {
       console.error("Registration error:", err);
       toast.error(getFirebaseErrorMessage(err) || "An error occurred during registration.");
