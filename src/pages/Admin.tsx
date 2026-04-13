@@ -676,7 +676,6 @@ export default function Admin() {
           stripeEnabled,
           manualEnabled,
           siteDescription,
-          logoUrl,
           updatedAt: new Date().toISOString()
         }, { merge: true });
       } catch (err) {
@@ -2279,22 +2278,6 @@ export default function Admin() {
                     </select>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Sayt Logotipi (URL)</label>
-                    <input
-                      type="text"
-                      value={logoUrl}
-                      onChange={(e) => setLogoUrl(e.target.value)}
-                      placeholder="https://example.com/logo.png"
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Ushbu URL orqali saytdagi barcha logotiplar va favicon o'zgaradi.</p>
-                    {logoUrl && (
-                      <div className="mt-2 p-2 border border-gray-200 dark:border-white/10 rounded-lg inline-block bg-gray-50 dark:bg-[#0B1120]">
-                        <img src={logoUrl} alt="Logo Preview" className="h-10 object-contain" onError={(e) => (e.currentTarget.src = 'https://placehold.co/512x512/10b981/ffffff/png?text=Xato')} />
-                      </div>
-                    )}
-                  </div>
 
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Egasining ismi</label>

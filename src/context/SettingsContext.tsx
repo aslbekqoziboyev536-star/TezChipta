@@ -40,9 +40,8 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
     const unsubscribe = onSnapshot(doc(db, 'settings', 'payment'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        const newLogoUrl = data.logoUrl || defaultLogo;
         setSettings({
-          logoUrl: newLogoUrl,
+          logoUrl: defaultLogo,
           adminCardNumber: data.adminCardNumber || '8600 0000 0000 0000',
           adminCardOwner: data.adminCardOwner || '',
           adminSupportPhone: data.adminSupportPhone || '',
@@ -50,21 +49,6 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
           manualEnabled: data.manualEnabled !== false,
           siteDescription: data.siteDescription || ''
         });
-
-        // Update favicon dynamically
-        let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
-        if (!link) {
-          link = document.createElement('link');
-          link.rel = 'icon';
-          document.head.appendChild(link);
-        }
-        link.href = newLogoUrl;
-
-        let shortcutLink: HTMLLinkElement | null = document.querySelector("link[rel='shortcut icon']");
-        if (shortcutLink) shortcutLink.href = newLogoUrl;
-
-        let appleLink: HTMLLinkElement | null = document.querySelector("link[rel='apple-touch-icon']");
-        if (appleLink) appleLink.href = newLogoUrl;
       }
     });
 
