@@ -9,6 +9,7 @@ import { Bus, ArrowLeft, Mail, Lock, User, Phone } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { useAsync } from '../hooks/useAsync';
 import { SafeImage } from '../components/SafeImage';
+import { motion } from 'motion/react';
 
 import { getAuthErrorMessage } from '../utils/authErrors';
 import { toast } from 'sonner';

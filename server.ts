@@ -260,7 +260,7 @@ async function startServer() {
         scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://apis.google.com", "https://*.stripe.com"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         imgSrc: ["'self'", "data:", "https:", "http:", "blob:"],
-        connectSrc: ["'self'", "https://*.googleapis.com", "https://*.firebaseio.com", "https://*.stripe.com", "wss://*.run.app", "ws://localhost:*", "https://picsum.photos", "https://imagehosting-hulf.onrender.com", "https://placehold.co", "https://cdn-icons-png.flaticon.com"],
+        connectSrc: ["'self'", "https://*.supabase.co", "https://*.supabase.in", "https://*.googleapis.com", "https://*.firebaseio.com", "https://*.stripe.com", "wss://*.run.app", "ws://localhost:*", "https://picsum.photos", "https://imagehosting-hulf.onrender.com", "https://placehold.co", "https://cdn-icons-png.flaticon.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         objectSrc: ["'none'"],
         mediaSrc: ["'self'"],
