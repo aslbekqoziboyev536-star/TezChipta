@@ -41,6 +41,7 @@ export default function Login() {
     try {
       await execute(() => loginWithGoogle());
       toast.success("Welcome back!");
+      navigate('/');
     } catch (err: any) {
       if (err.code === 'auth/popup-closed-by-user' || err.message?.includes('auth/popup-closed-by-user')) {
         reset();
@@ -63,6 +64,7 @@ export default function Login() {
     try {
       await execute(() => loginWithEmail(email, password));
       toast.success("Welcome back!");
+      navigate('/');
     } catch (err: any) {
       console.error("Email login error:", err);
       toast.error(getFirebaseErrorMessage(err) || "An error occurred during login.");
@@ -96,6 +98,7 @@ export default function Login() {
     try {
       await execute(() => confirmationResult.confirm(verificationCode));
       toast.success("Welcome back!");
+      navigate('/');
     } catch (err: any) {
       console.error("Verification error:", err);
       toast.error("Invalid verification code.");

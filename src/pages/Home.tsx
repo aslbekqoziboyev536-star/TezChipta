@@ -253,6 +253,20 @@ export default function Home() {
     fetchBookings();
   }, [selectedRideForSeat]);
 
+  const handleDeleteReview = async (reviewId: string) => {
+    if (user?.role !== 'admin') return;
+    if (window.confirm("Haqiqatan ham ushbu fikrni o'chirmoqchimisiz?")) {
+      try {
+        await deleteDoc(doc(db, 'reviews', reviewId));
+        setReviews(prev => prev.filter(r => r.id !== reviewId));
+        toast.success("Fikr o'chirildi");
+      } catch (error) {
+        console.error("Error deleting review:", error);
+        toast.error("Fikrni o'chirishda xatolik yuz berdi");
+      }
+    }
+  };
+
   useEffect(() => {
     let interval: any;
     if (showManualPayment && timer > 0) {
@@ -1173,7 +1187,25 @@ export default function Home() {
               reviews.map((review) => {
                 const initials = review.userName.split(' ').map((n: string) => n[0]).join('').toUpperCase();
                 return (
-                  <div key={review.id} className="bg-white dark:bg-[#111827] rounded-2xl border border-gray-200 dark:border-white/5 p-6 hover:border-emerald-500/30 transition-all shadow-sm flex flex-col">
+                  <div 
+                    key={review.id} 
+                    onContextMenu={(e) => {
+                      if (user?.role === 'admin') {
+                        e.preventDefault();
+                        handleDeleteReview(review.id);
+                      }
+                    }}
+                    className="relative bg-white dark:bg-[#111827] rounded-2xl border border-gray-200 dark:border-white/5 p-6 hover:border-emerald-500/30 transition-all shadow-sm flex flex-col group"
+                  >
+                    {user?.role === 'admin' && (
+                      <button
+                        onClick={() => handleDeleteReview(review.id)}
+                        className="md:hidden absolute top-4 right-4 p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-500/20 transition-all"
+                        title="O'chirish"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                     <div className="flex items-center gap-4 mb-4">
                       {review.userPhoto ? (
                         <img 

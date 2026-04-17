@@ -8,6 +8,8 @@ import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
 import { OAuth2Client } from "google-auth-library";
 import mongoose from "mongoose";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import admin from "firebase-admin";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
@@ -25,7 +27,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const isProduction = process.env.NODE_ENV === "production";
-const APP_URL = process.env.APP_URL || "http://localhost:3000";
+const APP_URL = process.env.APP_URL || "http://localhost:5174";
 
 function requireEnv(name: string) {
   const value = process.env[name];
@@ -186,27 +188,49 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
-  const PORT = process.env.PORT || 3000;
+  const PORT = process.env.PORT || 5174;
   const httpServer = createServer(app);
   const io = new Server(httpServer, { cors: { origin: true, credentials: true } });
 
-  // Security headers
-  app.use((req, res, next) => {
-    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
-    res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
-    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    if (isProduction) {
-        res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
-    }
-    next();
+  // Global Rate Limiting
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    message: "Too many requests from this IP, please try again after 15 minutes",
+    standardHeaders: true,
+    legacyHeaders: false,
   });
+  app.use("/api/", limiter);
 
-  app.use(cors({ origin: true, credentials: true }));
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ limit: '10mb', extended: true }));
+  // Security Headers with Helmet
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://www.gstatic.com", "https://apis.google.com"],
+        connectSrc: ["'self'", "https://*.firebaseio.com", "https://*.googleapis.com", "https://okgmaigpiqxlxlwqbtjb.supabase.co", "wss://*.supabase.co", "https://api.stripe.com"],
+        frameSrc: ["'self'", "https://*.firebaseapp.com", "https://*.google.com", "https://hooks.stripe.com"],
+        imgSrc: ["'self'", "data:", "blob:", "https://*.googleusercontent.com", "https://*.gstatic.com", "https://*.stripe.com", "https://www.gstatic.com"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+  }));
+
+  const corsOptions = {
+    origin: isProduction ? [APP_URL] : true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  };
+  app.use(cors(corsOptions));
+  
+  app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ limit: '1mb', extended: true }));
   app.use(cookieParser());
 
   // API Routes
