@@ -88,6 +88,60 @@ export function NotificationListener() {
         return () => unsubscribe();
     }, [user?.id, user?.lastSeenNotificationAt]);
 
+    useEffect(() => {
+        if (!user || user.role !== 'admin') return;
+
+        if ("Notification" in window && Notification.permission === "default") {
+            Notification.requestPermission();
+        }
+
+        let isInitialLoadMessages = true;
+        let isInitialLoadReviews = true;
+
+        const messagesRef = collection(db, 'messages');
+        const qMessages = query(messagesRef, where('status', '==', 'unread'));
+        const unsubscribeMessages = onSnapshot(qMessages, (snapshot) => {
+            if (isInitialLoadMessages) {
+                isInitialLoadMessages = false;
+                return;
+            }
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === 'added') {
+                    const data = change.doc.data();
+                    if (Notification.permission === 'granted') {
+                        new Notification('Yangi xabar (TezChipta)', {
+                            body: `${data.name}: ${data.message}`,
+                        });
+                    }
+                }
+            });
+        });
+
+        const reviewsRef = collection(db, 'reviews');
+        const qReviews = query(reviewsRef, where('status', '==', 'pending'));
+        const unsubscribeReviews = onSnapshot(qReviews, (snapshot) => {
+            if (isInitialLoadReviews) {
+                isInitialLoadReviews = false;
+                return;
+            }
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === 'added') {
+                    const data = change.doc.data();
+                    if (Notification.permission === 'granted') {
+                        new Notification('Yangi fikr-mulohaza (TezChipta)', {
+                            body: `${data.userName}: ${data.comment}`,
+                        });
+                    }
+                }
+            });
+        });
+
+        return () => {
+            unsubscribeMessages();
+            unsubscribeReviews();
+        };
+    }, [user?.id, user?.role]);
+
     const handleClose = async () => {
         if (!user || !activeNotification) return;
 

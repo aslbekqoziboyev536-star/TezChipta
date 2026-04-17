@@ -12,7 +12,7 @@ import {
   User as FirebaseUser
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, getDocFromServer, onSnapshot, updateDoc } from 'firebase/firestore';
-import { auth, googleProvider, db } from '../firebase';
+import { auth, googleProvider, db, requestForToken } from '../firebase';
 import { supabase } from '../lib/supabase';
 
 interface User {
@@ -178,6 +178,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (user && user.id) {
+      // Small timeout to not block UI rendering right away
+      setTimeout(() => {
+        requestForToken().then(token => {
+          if (token) {
+            updateDoc(doc(db, 'users', user.id), {
+              fcmToken: token
+            }).catch(err => console.error("Error saving FCM token:", err));
+          }
+        });
+      }, 2000);
+    }
+  }, [user?.id]);
 
   const loginWithGoogle = async () => {
     try {

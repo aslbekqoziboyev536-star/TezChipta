@@ -289,6 +289,26 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  // FCM Notification Endpoint
+  app.post("/api/send-notification", async (req, res) => {
+    const { fcmToken, title, body, url } = req.body;
+    if (!fcmToken) return res.status(400).json({ error: "FCM Token required" });
+    if (!firebaseApp) return res.status(500).json({ error: "Firebase Admin not initialized" });
+
+    try {
+      const message = {
+        notification: { title, body },
+        data: { url: url || "/" },
+        token: fcmToken
+      };
+      const response = await admin.messaging(firebaseApp).send(message);
+      res.json({ success: true, response });
+    } catch (error: any) {
+      console.error("FCM Send Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Fallback to SPA
   if (isProduction) {
     app.use(express.static(path.join(__dirname, "dist")));

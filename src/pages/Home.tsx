@@ -4,7 +4,7 @@ import { Modal } from '../components/Modal';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { collection, getDocs, addDoc, query, where, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { SafeImage } from '../components/SafeImage';
 import { db, auth, handleFirestoreError, OperationType, withRetry } from '../firebase';
 import { supabase } from '../lib/supabase';
@@ -43,7 +43,10 @@ import {
   Mail,
   Menu,
   X as CloseIcon,
-  Loader2
+  Loader2,
+  MoreVertical,
+  Edit2,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -57,6 +60,7 @@ export default function Home() {
   const [searchTo, setSearchTo] = useState('');
   const [logoClickCount, setLogoClickCount] = useState(0);
   const [lastClickTime, setLastClickTime] = useState(0);
+  const [activeRideMenu, setActiveRideMenu] = useState<string | null>(null);
   
   // Modals state
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
@@ -141,6 +145,12 @@ export default function Home() {
   const [messageSuccess, setMessageSuccess] = useState(false);
   const [newsletterLoading, setNewsletterLoading] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const handleClickOutside = () => setActiveRideMenu(null);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     const fetchFirestoreData = async () => {
@@ -269,7 +279,46 @@ export default function Home() {
     return new Intl.NumberFormat('uz-UZ').format(price) + " so'm";
   };
 
-  const handleSeatSelect = (seatNumber: number) => {
+  const handleSeatSelect = async (seatNumber: number, isTaken: boolean, bookingForSeat?: any) => {
+    if (user?.role === 'admin') {
+      if (isTaken && bookingForSeat) {
+        if (window.confirm("Bu o'rindiqni bo'shatishni xohlaysizmi?")) {
+          try {
+            await deleteDoc(doc(db, 'bookings', bookingForSeat.id));
+            setRideBookings(prev => prev.filter(b => b.id !== bookingForSeat.id));
+            toast.success("O'rindiq bo'shatildi");
+          } catch (error) {
+            console.error("Error deleting booking:", error);
+            toast.error("Xatolik yuz berdi");
+          }
+        }
+      } else if (!isTaken) {
+        if (window.confirm("Bu o'rindiqni band qilishni xohlaysizmi?")) {
+          try {
+            const bookingData = {
+              userId: user.id,
+              rideId: selectedRideForSeat,
+              seatNumber,
+              status: 'confirmed',
+              paymentStatus: 'paid',
+              paymentMethod: 'admin',
+              createdAt: new Date().toISOString(),
+              price: selectedRide?.price || 0,
+              passengerGender: 'male'
+            };
+            const bookingDoc = await addDoc(collection(db, 'bookings'), bookingData);
+            setRideBookings(prev => [...prev, { id: bookingDoc.id, ...bookingData }]);
+            toast.success("O'rindiq band qilindi");
+          } catch (error) {
+            console.error("Error adding booking:", error);
+            toast.error("Xatolik yuz berdi");
+          }
+        }
+      }
+      return;
+    }
+
+    if (isTaken) return;
     setSelectedSeat(seatNumber);
   };
 
@@ -907,7 +956,58 @@ export default function Home() {
                     exit={{ opacity: 0, scale: 0.95 }}
                     key={ride.id}
                     className="bg-white dark:bg-[#111827] rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden hover:border-emerald-500/30 transition-all shadow-sm hover:shadow-md relative group"
+                    onContextMenu={(e) => {
+                      if (user?.role === 'admin') {
+                        e.preventDefault();
+                        setActiveRideMenu(activeRideMenu === ride.id ? null : ride.id);
+                      }
+                    }}
                   >
+                    {user?.role === 'admin' && (
+                      <div className="absolute top-4 right-4 z-20 md:hidden">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveRideMenu(activeRideMenu === ride.id ? null : ride.id);
+                          }}
+                          className="p-2 bg-white/80 dark:bg-black/50 backdrop-blur rounded-full text-gray-500 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white shadow-sm"
+                        >
+                          <MoreVertical className="w-5 h-5" />
+                        </button>
+                      </div>
+                    )}
+                    {activeRideMenu === ride.id && user?.role === 'admin' && (
+                      <div className="absolute top-14 right-4 z-30 w-48 bg-white dark:bg-[#111827] rounded-xl shadow-xl border border-gray-200 dark:border-white/10 overflow-hidden">
+                        <button 
+                          onClick={(e) => {
+                             e.stopPropagation();
+                             navigate(`/administrator/rides`);
+                             toast.info("Reysni o'zgartirish uchun Admin panelga o'ting");
+                          }}
+                          className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 font-medium"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                          O'zgartirish
+                        </button>
+                        <button 
+                          onClick={async (e) => {
+                             e.stopPropagation();
+                             if (window.confirm("Haqiqatan ham bu reysni o'chirmoqchimisiz?")) {
+                               try {
+                                 await deleteDoc(doc(db, 'rides', ride.id));
+                                 setRides(prev => prev.filter(r => r.id !== ride.id));
+                                 toast.success("Reys o'chirildi");
+                               } catch(error) { toast.error("Xatolik yuz berdi"); }
+                             }
+                             setActiveRideMenu(null);
+                          }}
+                          className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center gap-2 font-medium"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          O'chirish
+                        </button>
+                      </div>
+                    )}
                     {ride.busType === 'VIP' && (
                       <div className="absolute top-0 right-6 bg-amber-500 text-black text-[10px] font-bold px-3 py-1 rounded-b-lg uppercase tracking-wider z-10">{t('home.rides.recommended')}</div>
                     )}
@@ -1434,8 +1534,8 @@ export default function Home() {
                   return (
                     <Button
                       key={seatNum}
-                      disabled={isTaken}
-                      onClick={() => handleSeatSelect(seatNum)}
+                      disabled={isTaken && user?.role !== 'admin'}
+                      onClick={() => handleSeatSelect(seatNum, isTaken, bookingForSeat)}
                       variant={isSelected ? 'primary' : 'secondary'}
                       className={`w-full aspect-square rounded-lg flex items-center justify-center text-sm font-medium transition-all p-0 h-auto border-2 ${
                         isTaken 
@@ -1472,20 +1572,22 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between border-t border-gray-200 dark:border-white/10 pt-6">
-              <div>
-                <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Jami summa:</div>
-                <div className="text-2xl font-bold text-emerald-500">
-                  {selectedSeat ? formatPrice(selectedRide.price) : '0 so\'m'}
+            {user?.role !== 'admin' && (
+              <div className="flex items-center justify-between border-t border-gray-200 dark:border-white/10 pt-6">
+                <div>
+                  <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Jami summa:</div>
+                  <div className="text-2xl font-bold text-emerald-500">
+                    {selectedSeat ? formatPrice(selectedRide.price) : '0 so\'m'}
+                  </div>
                 </div>
+                <Button
+                  disabled={!selectedSeat}
+                  loading={bookingLoading}
+                  onClick={proceedToPayment}
+                  className="px-8 py-3"
+                >{t('home.rides.continue')}</Button>
               </div>
-              <Button
-                disabled={!selectedSeat}
-                loading={bookingLoading}
-                onClick={proceedToPayment}
-                className="px-8 py-3"
-              >{t('home.rides.continue')}</Button>
-            </div>
+            )}
           </div>
         )}
       </Modal>

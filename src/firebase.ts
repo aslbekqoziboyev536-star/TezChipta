@@ -1,10 +1,10 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { getFirebaseErrorMessage } from './utils/firebaseErrors';
 import firebaseConfigJson from '../firebase-applet-config.json';
 
-// Firebase configuration: prioritize local config file, fallback to environment variables
 const firebaseConfig = {
   apiKey: firebaseConfigJson.apiKey || import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: firebaseConfigJson.authDomain || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -16,9 +16,36 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || undefined);
+export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+
+export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;
+
+export const requestForToken = async () => {
+  if (!messaging) return null;
+  
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      const currentToken = await getToken(messaging, { 
+        vapidKey: import.meta.env.VITE_VAPID_KEY 
+      });
+      
+      if (currentToken) {
+        console.log('FCM Token:', currentToken);
+        return currentToken;
+      } else {
+        console.log('No registration token available.');
+      }
+    } else {
+      console.log('Notification permission denied.');
+    }
+  } catch (err) {
+    console.error('An error occurred while retrieving token. ', err);
+  }
+  return null;
+};
 
 export enum OperationType {
   CREATE = 'create',

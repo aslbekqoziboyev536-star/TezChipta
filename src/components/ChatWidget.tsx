@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MessageCircle, X, Send, User, ShieldCheck, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy, doc, updateDoc, getDocs, limit, increment } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy, doc, updateDoc, getDocs, getDoc, limit, increment } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { Button } from './ui/Button';
 
@@ -24,15 +24,33 @@ export const ChatWidget: React.FC = () => {
   useEffect(() => {
     if (!user || isAdmin) return;
 
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+
     const chatsRef = collection(db, 'chats');
     const q = query(chatsRef, where('userId', '==', user.id), limit(1));
+
+    let initialLoad = true;
+    let prevUnreadCount = 0;
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
         const chatData = snapshot.docs[0].data();
         setChatId(snapshot.docs[0].id);
-        setUnreadCount(chatData.userUnreadCount || 0);
+        const currentUnread = chatData.userUnreadCount || 0;
+        setUnreadCount(currentUnread);
+
+        if (!initialLoad && currentUnread > prevUnreadCount && currentUnread > 0) {
+          if (Notification.permission === 'granted') {
+            new Notification('Yordam markazidan yangi xabar (TezChipta)', {
+              body: chatData.lastMessage,
+            });
+          }
+        }
+        prevUnreadCount = currentUnread;
       }
+      initialLoad = false;
     });
 
     return () => unsubscribe();
@@ -146,6 +164,31 @@ export const ChatWidget: React.FC = () => {
 
       if (isAdmin) {
         updateData.userUnreadCount = increment(1);
+        
+        // Trigger FCM Notification
+        try {
+          const currentChat = adminChats.find(c => c.id === currentChatId);
+          if (currentChat && currentChat.userId) {
+            const userDocSnap = await getDoc(doc(db, 'users', currentChat.userId));
+            if (userDocSnap.exists()) {
+              const fcmToken = userDocSnap.data().fcmToken;
+              if (fcmToken) {
+                fetch('/api/send-notification', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    fcmToken,
+                    title: 'Yordam markazidan xabar (TezChipta)',
+                    body: text,
+                    url: '/'
+                  })
+                }).catch(err => console.error("FCM API error:", err));
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Error fetching user for FCM:", e);
+        }
       } else {
         updateData.unreadCount = increment(1);
       }
