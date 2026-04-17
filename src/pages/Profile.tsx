@@ -2,12 +2,13 @@ import { useSettings } from '../context/SettingsContext';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
-import { collection, query, where, getDocs, doc, getDoc, updateDoc, addDoc, orderBy } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../firebase';
+import { collection, query, where, getDocs, doc, getDoc, updateDoc, addDoc, deleteDoc, orderBy } from 'firebase/firestore';
+import { db, auth, handleFirestoreError, OperationType, withRetry } from '../firebase';
+import { isValidEmail } from '../utils/validation';
 import { useNavigate, Link } from 'react-router-dom';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { Button } from '../components/ui/Button';
-import { Bus, Calendar, Clock, MapPin, User, Mail, ShieldCheck, ArrowLeft, LogOut, Edit2, Check, X, Download, Phone, CreditCard, Navigation, Map, Bell } from 'lucide-react';
+import { Bus, Calendar, Clock, MapPin, User, Mail, ShieldCheck, ArrowLeft, LogOut, Edit2, Check, X, Download, Phone, CreditCard, Navigation, Map, Volume2, VolumeX, BellOff, Bell } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { WeatherWidget } from '../components/WeatherWidget';
 import { SafeImage } from '../components/SafeImage';
@@ -18,7 +19,7 @@ import { toast } from 'sonner';
 export default function Profile() {
   const { logoUrl } = useSettings();
   const { user, logout, loading: authLoading } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const navigate = useNavigate();
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,15 +27,18 @@ export default function Profile() {
   const [newName, setNewName] = useState(user?.name || '');
   const [newGender, setNewGender] = useState(user?.gender || 'male');
   const [savingName, setSavingName] = useState(false);
-  const [isSubscribed, setIsSubscribed] = useState(false);
-  const [subscribing, setSubscribing] = useState(false);
-  const [newsletterHistory, setNewsletterHistory] = useState<any[]>([]);
-  const [userNotifications, setUserNotifications] = useState<any[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [trackingRideId, setTrackingRideId] = useState<string | null>(null);
   const [driverRides, setDriverRides] = useState<any[]>([]);
   const [sharingLocationId, setSharingLocationId] = useState<string | null>(null);
   const watchIdRef = React.useRef<number | null>(null);
+  const [activeTab, setActiveTab] = useState<'bookings' | 'newsletter'>('bookings');
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [subscriptionId, setSubscriptionId] = useState<string | null>(null);
+  const [checkingSubscription, setCheckingSubscription] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(user?.newsletterSoundEnabled ?? true);
+  const [newsletterHistory, setNewsletterHistory] = useState<any[]>([]);
+  const [userNotifications, setUserNotifications] = useState<any[]>([]);
 
   const handleDownloadTicket = async (bookingId: string) => {
     setDownloadingId(bookingId);
@@ -42,7 +46,7 @@ export default function Profile() {
       const idToken = await auth.currentUser?.getIdToken();
       const response = await fetch('/api/generate-ticket', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         },
@@ -73,6 +77,7 @@ export default function Profile() {
     if (user) {
       setNewName(user.name);
       setNewGender(user.gender || 'male');
+      setSoundEnabled(user.newsletterSoundEnabled ?? true);
     }
   }, [user]);
 
@@ -99,56 +104,63 @@ export default function Profile() {
     }
   };
 
-  const handleSubscribe = async () => {
-    if (!user) return;
-    setSubscribing(true);
+  const checkSubscription = async () => {
+    if (!user?.email) {
+      setCheckingSubscription(false);
+      return;
+    }
     try {
-      const subscribersRef = collection(db, 'subscribers');
-      const q = query(subscribersRef, where('email', '==', user.email), where('status', '==', 'active'));
-      const snapshot = await getDocs(q);
-
+      const qSub = query(
+        collection(db, 'newsletter_subscribers'),
+        where('emailLower', '==', user.email.toLowerCase())
+      );
+      const snapshot = await getDocs(qSub);
       if (!snapshot.empty) {
         setIsSubscribed(true);
-        toast.info(t('profile.newsletter.already_subscribed'));
-        return;
+        setSubscriptionId(snapshot.docs[0].id);
+        
+        // Fetch newsletter history if subscribed
+        const newslettersRef = collection(db, 'newsletters');
+        const nq = query(newslettersRef, orderBy('sentAt', 'desc'));
+        const nSnapshot = await getDocs(nq);
+        setNewsletterHistory(nSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } else {
+        setIsSubscribed(false);
+        setSubscriptionId(null);
       }
-
-      await addDoc(collection(db, 'subscribers'), {
-        email: user.email,
-        userId: user.id,
-        subscribedAt: new Date().toISOString(),
-        status: 'active'
-      });
-
-      setIsSubscribed(true);
-      toast.success(t('profile.newsletter.success'));
     } catch (error) {
-      console.error("Subscription error:", error);
-      handleFirestoreError(error, OperationType.CREATE, 'subscribers');
+      console.error("Error checking subscription:", error);
     } finally {
-      setSubscribing(false);
+      setCheckingSubscription(false);
     }
   };
 
-  const handleUnsubscribe = async () => {
+  const fetchNotifications = async () => {
     if (!user) return;
-    setSubscribing(true);
     try {
-      const subscribersRef = collection(db, 'subscribers');
-      const q = query(subscribersRef, where('email', '==', user.email), where('status', '==', 'active'));
-      const snapshot = await getDocs(q);
+      // Check if user has bookings
+      const bookingsQuery = query(collection(db, 'bookings'), where('userId', '==', user.id));
+      const bookingsSnapshot = await getDocs(bookingsQuery);
+      const hasNoBookings = bookingsSnapshot.empty;
 
-      if (!snapshot.empty) {
-        const subDoc = snapshot.docs[0];
-        await updateDoc(doc(db, 'subscribers', subDoc.id), { status: 'unsubscribed' });
-        setIsSubscribed(false);
-        toast.success(t('profile.newsletter.unsubscribed'));
-      }
+      // Check registration date
+      const registrationDate = user.createdAt ? new Date(user.createdAt) : new Date();
+      const twoDaysAgo = new Date();
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+      const isRecentlyJoined = registrationDate > twoDaysAgo;
+      const isNew = hasNoBookings || isRecentlyJoined;
+
+      const notificationsRef = collection(db, 'notifications');
+      const q = query(notificationsRef, orderBy('createdAt', 'desc'));
+      const snapshot = await getDocs(q);
+      
+      const filtered = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as any))
+        .filter(n => n.target === 'all' || (n.target === 'new' && isNew));
+        
+      setUserNotifications(filtered);
     } catch (error) {
-      console.error("Unsubscription error:", error);
-      handleFirestoreError(error, OperationType.UPDATE, 'subscribers');
-    } finally {
-      setSubscribing(false);
+      console.error("Error fetching notifications:", error);
     }
   };
 
@@ -165,7 +177,7 @@ export default function Profile() {
           collection(db, 'bookings'),
           where('userId', '==', user.id)
         );
-        
+
         let bookingsSnapshot;
         try {
           bookingsSnapshot = await getDocs(bookingsQuery);
@@ -196,6 +208,8 @@ export default function Profile() {
     };
 
     fetchBookings();
+    checkSubscription();
+    fetchNotifications();
 
     if (user?.role === 'driver') {
       const fetchDriverRides = async () => {
@@ -205,65 +219,103 @@ export default function Profile() {
             where('driverId', '==', user.id)
           );
           const ridesSnapshot = await getDocs(ridesQuery);
-          setDriverRides(ridesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+          setDriverRides(ridesSnapshot.docs.map(d => ({ id: d.id, ...d.data() })));
         } catch (error) {
           console.error("Error fetching driver rides:", error);
         }
       };
       fetchDriverRides();
     }
+  }, [user, authLoading, navigate]);
 
-    const fetchNewsletterInfo = async () => {
-      if (!user?.email) return;
+  const handleNewsletterSubscribe = async () => {
+    if (!user?.email) {
+      toast.error("Email manzilingiz topilmadi");
+      return;
+    }
+    setCheckingSubscription(true);
+    try {
+      const payload = {
+        email: user.email,
+        emailLower: user.email.toLowerCase(),
+        userId: user.id,
+        createdAt: new Date().toISOString(),
+        source: 'profile'
+      };
+      const docRef = await addDoc(collection(db, 'newsletter_subscribers'), payload);
+      setIsSubscribed(true);
+      setSubscriptionId(docRef.id);
+      toast.success("Muvaffaqiyatli obuna bo'ldingiz!");
+      checkSubscription(); // Refresh history
+    } catch (error) {
+      console.error("Error subscribing:", error);
+      toast.error("Obuna bo'lishda xatolik yuz berdi");
+    } finally {
+      setCheckingSubscription(false);
+    }
+  };
+
+  const handleNewsletterUnsubscribe = async () => {
+    if (!subscriptionId) return;
+    if (!window.confirm("Obunani to'xtatmoqchimisiz?")) return;
+
+    setCheckingSubscription(true);
+    try {
+      await deleteDoc(doc(db, 'newsletter_subscribers', subscriptionId));
+      setIsSubscribed(false);
+      setSubscriptionId(null);
+      toast.success("Obuna to'xtatildi");
+    } catch (error) {
+      console.error("Error unsubscribing:", error);
+      toast.error("Xatolik yuz berdi");
+    } finally {
+      setCheckingSubscription(false);
+    }
+  };
+
+  const handleToggleSound = async () => {
+    if (!user) return;
+    const newSoundState = !soundEnabled;
+    setSoundEnabled(newSoundState);
+    try {
+      await updateDoc(doc(db, 'users', user.id), {
+        newsletterSoundEnabled: newSoundState
+      });
+      toast.success(newSoundState ? "Ovozli bildirishnomalar yoqildi" : "Ovozli bildirishnomalar o'chirildi");
+    } catch (error) {
+      console.error("Error toggling sound:", error);
+      toast.error("Nastroykani saqlashda xatolik yuz berdi");
+    }
+  };
+
+  // Newsletter auto-subscription
+  useEffect(() => {
+    if (authLoading || !user || !user.email) return;
+
+    const autoSubscribe = async () => {
       try {
-        const subscribersRef = collection(db, 'subscribers');
-        const q = query(subscribersRef, where('email', '==', user.email), where('status', '==', 'active'));
-        const snapshot = await getDocs(q);
-        setIsSubscribed(!snapshot.empty);
+        const emailLower = user.email.toLowerCase();
+        const subscribersRef = collection(db, 'newsletter_subscribers');
+        const existingQuery = query(subscribersRef, where('emailLower', '==', emailLower));
+        const existingSnapshot = await withRetry(() => getDocs(existingQuery));
 
-        if (!snapshot.empty) {
-          const newslettersRef = collection(db, 'newsletters');
-          const nq = query(newslettersRef, orderBy('sentAt', 'desc'));
-          const nSnapshot = await getDocs(nq);
-          setNewsletterHistory(nSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        if (existingSnapshot.empty) {
+          await withRetry(() => addDoc(subscribersRef, {
+            email: user.email,
+            emailLower,
+            createdAt: new Date().toISOString(),
+            source: 'profile_entry',
+            userId: user.id
+          }));
+          console.log("Automatically subscribed to newsletter from profile entry.");
         }
       } catch (error) {
-        console.error("Error fetching newsletter info:", error);
+        console.error("Auto-subscription failed:", error);
       }
     };
 
-    const fetchNotifications = async () => {
-      if (!user) return;
-      try {
-        // Check if user has bookings
-        const bookingsQuery = query(collection(db, 'bookings'), where('userId', '==', user.id));
-        const bookingsSnapshot = await getDocs(bookingsQuery);
-        const hasNoBookings = bookingsSnapshot.empty;
-
-        // Check registration date
-        const registrationDate = user.createdAt ? new Date(user.createdAt) : new Date();
-        const twoDaysAgo = new Date();
-        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-        const isRecentlyJoined = registrationDate > twoDaysAgo;
-        const isNew = hasNoBookings || isRecentlyJoined;
-
-        const notificationsRef = collection(db, 'notifications');
-        const q = query(notificationsRef, orderBy('createdAt', 'desc'));
-        const snapshot = await getDocs(q);
-        
-        const filtered = snapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() } as any))
-          .filter(n => n.target === 'all' || (n.target === 'new' && isNew));
-          
-        setUserNotifications(filtered);
-      } catch (error) {
-        console.error("Error fetching notifications:", error);
-      }
-    };
-
-    fetchNewsletterInfo();
-    fetchNotifications();
-  }, [user, authLoading, navigate]);
+    autoSubscribe();
+  }, [user, authLoading]);
 
   const toggleLocationSharing = (rideId: string) => {
     if (sharingLocationId === rideId) {
@@ -320,11 +372,11 @@ export default function Profile() {
   }, []);
 
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('uz-UZ').format(price) + " so'm";
+    return new Intl.NumberFormat(language === 'uz' ? 'uz-UZ' : language === 'ru' ? 'ru-RU' : 'en-US').format(price) + (language === 'uz' ? " so'm" : language === 'ru' ? " сум" : " sum");
   };
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('uz-UZ', {
+    return new Date(dateStr).toLocaleDateString(language === 'uz' ? 'uz-UZ' : language === 'ru' ? 'ru-RU' : 'en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -334,7 +386,7 @@ export default function Profile() {
   };
 
   if (authLoading || loading) {
-    return <LoadingScreen message="Loading your profile..." />;
+    return <LoadingScreen message={t('profile.loading')} />;
   }
 
   return (
@@ -346,7 +398,7 @@ export default function Profile() {
             <Link to="/" className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-full transition-colors">
               <ArrowLeft className="w-5 h-5 text-gray-500 dark:text-gray-400" />
             </Link>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">My Profile</h1>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">{t('profile.header')}</h1>
           </div>
           <div className="flex items-center gap-4">
             <ThemeToggle />
@@ -380,7 +432,7 @@ export default function Profile() {
               <div className="w-20 h-20 sm:w-24 sm:h-24 bg-emerald-500 rounded-full flex items-center justify-center text-white text-2xl sm:text-3xl font-bold mx-auto mb-4 sm:mb-6 shadow-lg shadow-emerald-500/20">
                 {user?.name[0].toUpperCase()}
               </div>
-              
+
               {isEditingName ? (
                 <div className="flex flex-col gap-3 mb-4">
                   <input
@@ -438,15 +490,15 @@ export default function Profile() {
                   </span>
                 </div>
               )}
-              
-              <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm mb-4 sm:mb-6">{user?.email || user?.phoneNumber}</p>
-              
+
+              <p className="text-gray-700 dark:text-gray-200 text-xs sm:text-sm mb-4 sm:mb-6 font-medium">{user?.email || user?.phoneNumber}</p>
+
               <div className="space-y-2 sm:space-y-3 text-left">
                 <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 bg-gray-50 dark:bg-[#0B1120] rounded-xl border border-gray-100 dark:border-white/5">
                   <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
                   <div>
-                    <div className="text-[8px] sm:text-[10px] text-gray-500 uppercase tracking-wider">Status</div>
-                    <div className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white capitalize">
+                    <div className="text-[10px] sm:text-[11px] text-gray-600 dark:text-gray-300 uppercase tracking-widest font-bold mb-0.5">Status</div>
+                    <div className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white capitalize bg-emerald-100/50 dark:bg-emerald-500/20 px-2 py-0.5 rounded-md">
                       {user?.role === 'admin' ? 'Admin' : user?.role === 'driver' ? 'Haydovchi' : 'Foydalanuvchi'}
                     </div>
                   </div>
@@ -454,8 +506,8 @@ export default function Profile() {
                 <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 bg-gray-50 dark:bg-[#0B1120] rounded-xl border border-gray-100 dark:border-white/5">
                   <Mail className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
                   <div>
-                    <div className="text-[8px] sm:text-[10px] text-gray-500 uppercase tracking-wider">{user?.email ? t('profile.settings.email') : 'Telefon'}</div>
-                    <div className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate max-w-[140px] sm:max-w-[180px]">{user?.email || user?.phoneNumber}</div>
+                    <div className="text-[10px] sm:text-[11px] text-gray-600 dark:text-gray-300 uppercase tracking-widest font-bold mb-0.5">{user?.email ? t('profile.settings.email') : 'Telefon'}</div>
+                    <div className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white truncate max-w-[140px] sm:max-w-[180px]">{user?.email || user?.phoneNumber}</div>
                   </div>
                 </div>
                 {user?.phoneNumber && user?.email && (
@@ -502,10 +554,14 @@ export default function Profile() {
               <div className="absolute top-0 left-0 w-full h-1.5 bg-blue-500" />
               <div className="flex items-center gap-3 mb-6">
                 <Mail className="w-6 h-6 text-blue-500" />
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('profile.newsletter')}</h3>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('profile.tabs.newsletter')}</h3>
               </div>
 
-              {isSubscribed ? (
+              {checkingSubscription ? (
+                <div className="py-8 text-center">
+                  <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                </div>
+              ) : isSubscribed ? (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl border border-emerald-100 dark:border-emerald-500/20">
                     <div className="flex items-center gap-3">
@@ -515,8 +571,7 @@ export default function Profile() {
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={handleUnsubscribe}
-                      loading={subscribing}
+                      onClick={handleNewsletterUnsubscribe}
                       className="text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 border-0 h-auto py-1"
                     >
                       Bekor qilish
@@ -524,7 +579,19 @@ export default function Profile() {
                   </div>
 
                   <div className="space-y-4">
-                    <h4 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">{t('profile.newsletter.history')}</h4>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold text-gray-700 dark:text-gray-200">Ovozli bildirishnomalar</span>
+                      <button
+                        onClick={handleToggleSound}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${soundEnabled ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-gray-700'}`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${soundEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Xabarlar tarixi</h4>
                     {newsletterHistory.length > 0 ? (
                       <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                         {newsletterHistory.map((nl) => (
@@ -551,12 +618,11 @@ export default function Profile() {
                     Yangi chegirmalar va yangiliklardan xabardor bo'lish uchun obuna bo'ling.
                   </p>
                   <Button
-                    onClick={handleSubscribe}
-                    loading={subscribing}
+                    onClick={handleNewsletterSubscribe}
                     className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-500/20"
                     leftIcon={<Mail className="w-5 h-5" />}
                   >
-                    {t('profile.newsletter.subscribe_btn')}
+                    Obuna bo'lish
                   </Button>
                 </div>
               )}
@@ -595,8 +661,8 @@ export default function Profile() {
                   </div>
                 ) : (
                   <div className="text-center py-8">
-                    <Bell className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                    <p className="text-sm text-gray-500">{t('notifications.empty')}</p>
+                    <BellOff className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500">Bildirishnomalar yo'q</p>
                   </div>
                 )}
               </div>
@@ -634,7 +700,7 @@ export default function Profile() {
             )}
 
             <div>
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2 ml-2">
                 <SafeImage src={logoUrl} alt="Tez Chipta" className="w-6 h-6 object-contain" />
                 Mening chiptalarim
               </h3>
@@ -646,8 +712,8 @@ export default function Profile() {
                 </div>
                 <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Hali chiptalar yo'q</h4>
                 <p className="text-gray-600 dark:text-gray-400 mb-6">Siz hali birorta ham reysga chipta xarid qilmagansiz.</p>
-                <Button 
-                  onClick={() => navigate('/')} 
+                <Button
+                  onClick={() => navigate('/')}
                   className="px-6 py-2.5 bg-emerald-500 text-white rounded-xl font-medium hover:bg-emerald-600 transition-colors h-auto"
                 >
                   Reyslarni qidirish
@@ -662,8 +728,8 @@ export default function Profile() {
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className={`flex items-center gap-1.5 px-3 py-1 text-[10px] sm:text-xs font-bold rounded-full uppercase tracking-wider ${
-                              booking.status === 'confirmed' 
-                                ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-500' 
+                              booking.status === 'confirmed'
+                                ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-500'
                                 : booking.paymentStatus === 'pending_review'
                                 ? 'bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500'
                                 : booking.status === 'cancelled'
@@ -689,7 +755,7 @@ export default function Profile() {
                             <span className="text-[10px] sm:text-xs text-gray-400 font-mono">ID: {booking.id.slice(0, 8)}</span>
                           </div>
                         </div>
-                        
+
                         <div className="flex items-center gap-3 sm:gap-6">
                           <div className="text-left">
                             <div className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white">{booking.ride?.departureTime}</div>
@@ -724,7 +790,7 @@ export default function Profile() {
                           </div>
                         </div>
                       </div>
-                      
+
                       <div className="sm:text-right flex flex-row sm:flex-col justify-between sm:justify-center items-center sm:items-end gap-2 border-t sm:border-t-0 sm:border-l border-gray-100 dark:border-white/5 pt-4 sm:pt-0 sm:pl-6">
                         <div className="text-sm text-gray-500 dark:text-gray-400">To'langan:</div>
                         <div className="text-xl font-bold text-emerald-500 mb-2">{formatPrice(booking.price)}</div>
@@ -762,14 +828,14 @@ export default function Profile() {
       </div>
     </main>
 
-      <AnimatePresence>
-        {trackingRideId && (
-          <BusTracker 
-            rideId={trackingRideId} 
-            onClose={() => setTrackingRideId(null)} 
-          />
-        )}
-      </AnimatePresence>
-    </div>
-  );
+    <AnimatePresence>
+      {trackingRideId && (
+        <BusTracker
+          rideId={trackingRideId}
+          onClose={() => setTrackingRideId(null)}
+        />
+      )}
+    </AnimatePresence>
+  </div>
+);
 }

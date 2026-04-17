@@ -53,7 +53,7 @@ export default function Admin() {
   const [newsletterForm, setNewsletterForm] = useState({ subject: '', content: '' });
   const [notificationForm, setNotificationForm] = useState({ title: '', type: 'info', details: '', target: 'all' });
   const [adminCardNumber, setAdminCardNumber] = useState('');
-  const [logoUrl, setLogoUrl] = useState('/icon.png');
+  const [logoUrl, setLogoUrl] = useState('/logo.png');
   const [adminCardOwner, setAdminCardOwner] = useState('');
   const [adminSupportPhone, setAdminSupportPhone] = useState('');
   const [stripeEnabled, setStripeEnabled] = useState(true);
@@ -227,9 +227,6 @@ export default function Admin() {
         setManualEnabled(paymentSettings.manualEnabled !== false);
         if (paymentSettings.siteDescription) {
           setSiteDescription(paymentSettings.siteDescription);
-        }
-        if (paymentSettings.logoUrl) {
-          setLogoUrl(paymentSettings.logoUrl);
         }
       }
 
@@ -608,13 +605,42 @@ export default function Admin() {
 
   const handleUpdateUserRole = async (userId: string, newRole: string) => {
     try {
-      try {
-        await updateDoc(doc(db, 'users', userId), { role: newRole });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
+      const token = await auth.currentUser?.getIdToken();
+      const endpoint = newRole === 'admin'
+        ? '/api/admin/promote-to-admin'
+        : newRole === 'driver'
+          ? '/api/admin/promote-to-driver'
+          : null;
+
+      if (!endpoint) {
+        // For regular user role, update directly in Firestore
+        try {
+          await updateDoc(doc(db, 'users', userId), { role: newRole });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
+          return;
+        }
+        setUsersList(usersList.map(u => u.id === userId ? { ...u, role: newRole } : u));
         return;
       }
+
+      // Use server endpoint for admin and driver roles
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ userId })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to update user role");
+      }
+
       setUsersList(usersList.map(u => u.id === userId ? { ...u, role: newRole } : u));
+      toast.success("Foydalanuvchi roli muvaffaqiyatli o'zgartirildi");
     } catch (error) {
       console.error("Error updating user role:", error);
       setError("An error occurred while changing user role");
@@ -2379,6 +2405,7 @@ export default function Admin() {
                     </select>
                   </div>
 
+<<<<<<< HEAD
 
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Egasining ismi</label>
@@ -2389,6 +2416,79 @@ export default function Admin() {
                       placeholder="ASLBEK QOZIBOYEV"
                       className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                     />
+=======
+                  {/* Other Settings */}
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Qo'llab-quvvatlash telefoni</label>
+                      <input
+                        type="text"
+                        value={adminSupportPhone}
+                        onChange={(e) => setAdminSupportPhone(e.target.value)}
+                        placeholder="+998 90 000 00 00"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Sayt tavsifi</label>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(siteDescription);
+                            toast.success("Tavsif nusxalandi");
+                          }}
+                          className="text-emerald-500 hover:text-emerald-600 flex items-center gap-1 text-xs font-medium"
+                        >
+                          <Copy className="w-3 h-3" />
+                          Nusxa olish
+                        </button>
+                      </div>
+                      <textarea
+                        value={siteDescription}
+                        onChange={(e) => setSiteDescription(e.target.value)}
+                        rows={4}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all resize-none"
+                      />
+                    </div>
+
+                    {/* Payment Toggles */}
+                    <div className="pt-4 space-y-4">
+                      <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#0B1120]/50 border border-gray-100 dark:border-white/5">
+                        <div>
+                          <div className="font-bold text-gray-900 dark:text-white">Stripe (Onlayn to'lov)</div>
+                          <div className="text-xs text-gray-500">Kredit/debit karta orqali onlayn to'lash</div>
+                        </div>
+                        <button
+                          onClick={() => setStripeEnabled(!stripeEnabled)}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${stripeEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+                        >
+                          <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${stripeEnabled ? 'right-1' : 'left-1'}`} />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#0B1120]/50 border border-gray-100 dark:border-white/5">
+                        <div>
+                          <div className="font-bold text-gray-900 dark:text-white">Karta orqali (Manual)</div>
+                          <div className="text-xs text-gray-500">O'tkazma qilib chek yuborish orqali to'lash</div>
+                        </div>
+                        <button
+                          onClick={() => setManualEnabled(!manualEnabled)}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${manualEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+                        >
+                          <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${manualEnabled ? 'right-1' : 'left-1'}`} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <Button
+                      onClick={handleUpdateSettings}
+                      loading={updatingSettings}
+                      className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg rounded-2xl"
+                    >
+                      Saqlash
+                    </Button>
+>>>>>>> 70ab5be (Enhance profile with newsletter settings and fix firestore rules)
                   </div>
 
                   <div className="space-y-2">

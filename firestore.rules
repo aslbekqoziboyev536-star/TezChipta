@@ -87,14 +87,19 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && (
-        ('email' in request.auth.token && request.auth.token.email.lower() == "qoziboyevaslbek359@gmail.com") ||
+        (request.auth.token.get('email', '').lower() == "qoziboyevaslbek359@gmail.com") ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
       );
     }
 
-    function isRecent(time) {
-      return time is string && duration.value(request.time - timestamp.value(time)) < duration.value(5, 'm');
+    function isAdminOrInWhitelist() {
+      return isAuthenticated() && (
+        (request.auth.token.get('email', '').lower() == "qoziboyevaslbek359@gmail.com") ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        (request.auth.token.get('email', '').lower() in ["admin@tezchipta.uz", "support@tezchipta.uz"])
+      );
     }
 
     function isDriver() {
@@ -139,7 +144,7 @@ service cloud.firestore {
     }
 
     function isValidRide(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['busType', 'departureTime', 'arrivalTime', 'duration', 'price', 'rating', 'driverId', 'date', 'from', 'to', 'images', 'status', 'id'])) &&
+      return (isAdmin() || hasOnlyAllowedFields(['busType', 'departureTime', 'arrivalTime', 'duration', 'price', 'rating', 'driverId', 'date', 'from', 'to', 'images', 'status', 'id', 'totalSeats', 'seatLayout', 'bookedSeats'])) &&
              hasRequiredFields(['busType', 'departureTime', 'arrivalTime', 'duration', 'price', 'rating', 'driverId', 'date', 'from', 'to', 'images', 'status']) &&
              data.busType is string && data.busType.size() > 0 && data.busType.size() < 100 &&
              data.departureTime is string && data.departureTime.size() > 0 && data.departureTime.size() < 50 &&
@@ -152,7 +157,10 @@ service cloud.firestore {
              data.from is string && data.from.size() > 0 && data.from.size() < 200 &&
              data.to is string && data.to.size() > 0 && data.to.size() < 200 &&
              data.images is list && data.images.size() <= 10 &&
-             data.status in ['active', 'completed', 'cancelled'];
+             data.status in ['active', 'completed', 'cancelled'] &&
+             (!('totalSeats' in data) || data.totalSeats is number) &&
+             (!('seatLayout' in data) || data.seatLayout is string) &&
+             (!('bookedSeats' in data) || data.bookedSeats is list);
     }
 
     function isValidFaq(data) {
@@ -163,7 +171,7 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['name', 'email', 'phoneNumber', 'role', 'createdAt', 'birthDate', 'passport', 'address', 'isProfileComplete', 'picture', 'gender', 'uid'])) &&
+      return hasOnlyAllowedFields(['name', 'email', 'phoneNumber', 'role', 'createdAt', 'birthDate', 'passport', 'address', 'isProfileComplete', 'picture', 'gender', 'lastSeenNotificationAt', 'newsletterSoundEnabled']) &&
              hasRequiredFields(['name', 'role']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              (!('email' in data) || (data.email == "" || isValidEmail(data.email))) &&
@@ -174,8 +182,9 @@ service cloud.firestore {
              (!('address' in data) || (data.address is string && data.address.size() < 200)) &&
              (!('isProfileComplete' in data) || (data.isProfileComplete is bool)) &&
              (!('picture' in data) || (isValidUrl(data.picture) && data.picture.size() < 2000)) &&
+             (!('lastSeenNotificationAt' in data) || (data.lastSeenNotificationAt is string)) &&
              (!('gender' in data) || data.gender in ['male', 'female']) &&
-             (!('uid' in data) || data.uid is string) &&
+             (!('newsletterSoundEnabled' in data) || data.newsletterSoundEnabled is bool) &&
              data.role in ['admin', 'user', 'driver'];
     }
 
@@ -279,6 +288,16 @@ service cloud.firestore {
              data.status in ['active', 'unsubscribed'];
     }
 
+    function isValidNewsletterSubscriber(data) {
+      return (isAdmin() || hasOnlyAllowedFields(['email', 'emailLower', 'userId', 'createdAt', 'source', 'id'])) &&
+             hasRequiredFields(['email', 'emailLower', 'createdAt']) &&
+             isValidEmail(data.email) &&
+             data.emailLower is string &&
+             (!('userId' in data) || data.userId is string) &&
+             data.createdAt is string &&
+             (!('source' in data) || data.source is string);
+    }
+
     function isValidNewsletter(data) {
       return (isAdmin() || hasOnlyAllowedFields(['subject', 'content', 'sentAt', 'authorId', 'recipientCount', 'id'])) &&
              hasRequiredFields(['subject', 'content', 'sentAt', 'authorId', 'recipientCount']) &&
@@ -290,14 +309,15 @@ service cloud.firestore {
     }
 
     function isValidNotification(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['title', 'type', 'details', 'target', 'createdAt', 'authorId', 'id'])) &&
+      return (isAdmin() || hasOnlyAllowedFields(['title', 'type', 'details', 'target', 'createdAt', 'authorId', 'id', 'userId'])) &&
              hasRequiredFields(['title', 'type', 'details', 'target', 'createdAt', 'authorId']) &&
              data.title is string && data.title.size() > 0 &&
              data.type is string &&
              data.details is string && data.details.size() > 0 &&
              data.target in ['all', 'new'] &&
              data.createdAt is string &&
-             data.authorId is string;
+             data.authorId is string &&
+             (!('userId' in data) || data.userId is string);
     }
 
     function isValidUserNotification(data) {
@@ -335,7 +355,7 @@ service cloud.firestore {
     match /rides/{rideId} {
       allow read: if true;
       allow create: if isServer(request.resource.data) || (isAdmin() && isValidRide(request.resource.data));
-      allow update: if isServer(request.resource.data) || (isAdmin() && isValidRide(request.resource.data));
+      allow update: if isServer(request.resource.data) || (isAdmin() && isValidRide(request.resource.data)) || (isAuthenticated() && isValidRide(request.resource.data));
       allow delete: if isServer(resource.data) || isAdmin();
     }
 
@@ -372,8 +392,15 @@ service cloud.firestore {
     match /messages/{messageId} {
       allow read: if isAdmin();
       allow create: if isServer(request.resource.data) || isValidMessage(request.resource.data);
-      allow update: if isServer(request.resource.data) || (isAdmin() && isValidMessage(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdmin();
+      allow update: if isServer(request.resource.data) || (isAdminOrInWhitelist() && isValidMessage(request.resource.data));
+      allow delete: if isServer(resource.data) || isAdminOrInWhitelist();
+    }
+
+    match /newsletter_subscribers/{subscriberId} {
+      allow read: if isAdminOrInWhitelist() || (isAuthenticated() && (resource.data.userId == request.auth.uid || resource.data.get('emailLower', '') == request.auth.token.get('email', '').lower()));
+      allow create: if isValidNewsletterSubscriber(request.resource.data);
+      allow update: if isAdminOrInWhitelist() && isValidNewsletterSubscriber(request.resource.data);
+      allow delete: if isAdminOrInWhitelist() || (isAuthenticated() && resource.data.userId == request.auth.uid);
     }
 
     match /chats/{chatId} {
@@ -397,14 +424,9 @@ service cloud.firestore {
       allow delete: if isAdmin() || (isDriver() && resource.data.authorId == request.auth.uid);
     }
 
-    match /settings/payment {
-      allow read: if true;
-      allow write: if isServer(request.resource.data) || (isAdmin() && isValidSettings(request.resource.data));
-    }
-
     match /settings/{settingId} {
       allow read: if true;
-      allow write: if isServer(request.resource.data) || isAdmin();
+      allow write: if isServer(request.resource.data) || (settingId == 'payment' ? isAdmin() && isValidSettings(request.resource.data) : isAdmin());
     }
 
     match /subscribers/{subId} {

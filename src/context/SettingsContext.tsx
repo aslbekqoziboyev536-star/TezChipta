@@ -12,7 +12,7 @@ interface SettingsContextType {
   siteDescription: string;
 }
 
-const defaultLogo = '/icon.png';
+const defaultLogo = '/logo.png';
 
 const SettingsContext = createContext<SettingsContextType>({
   logoUrl: defaultLogo,
@@ -40,8 +40,9 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
     const unsubscribe = onSnapshot(doc(db, 'settings', 'payment'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
+        const newLogoUrl = defaultLogo; // Always use local logo
         setSettings({
-          logoUrl: defaultLogo,
+          logoUrl: newLogoUrl,
           adminCardNumber: data.adminCardNumber || '8600 0000 0000 0000',
           adminCardOwner: data.adminCardOwner || '',
           adminSupportPhone: data.adminSupportPhone || '',
@@ -49,6 +50,16 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
           manualEnabled: data.manualEnabled !== false,
           siteDescription: data.siteDescription || ''
         });
+
+        // Update favicon dynamically to always use local logo
+        const updateFavicon = (selector: string, href: string) => {
+          let link: HTMLLinkElement | null = document.querySelector(selector);
+          if (link) link.href = href;
+        };
+
+        updateFavicon("link[rel~='icon']", newLogoUrl);
+        updateFavicon("link[rel='shortcut icon']", newLogoUrl);
+        updateFavicon("link[rel='apple-touch-icon']", newLogoUrl);
       }
     });
 
