@@ -2405,8 +2405,6 @@ export default function Admin() {
                     </select>
                   </div>
 
-<<<<<<< HEAD
-
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Egasining ismi</label>
                     <input
@@ -2416,79 +2414,6 @@ export default function Admin() {
                       placeholder="ASLBEK QOZIBOYEV"
                       className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                     />
-=======
-                  {/* Other Settings */}
-                  <div className="space-y-6">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Qo'llab-quvvatlash telefoni</label>
-                      <input
-                        type="text"
-                        value={adminSupportPhone}
-                        onChange={(e) => setAdminSupportPhone(e.target.value)}
-                        placeholder="+998 90 000 00 00"
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Sayt tavsifi</label>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(siteDescription);
-                            toast.success("Tavsif nusxalandi");
-                          }}
-                          className="text-emerald-500 hover:text-emerald-600 flex items-center gap-1 text-xs font-medium"
-                        >
-                          <Copy className="w-3 h-3" />
-                          Nusxa olish
-                        </button>
-                      </div>
-                      <textarea
-                        value={siteDescription}
-                        onChange={(e) => setSiteDescription(e.target.value)}
-                        rows={4}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all resize-none"
-                      />
-                    </div>
-
-                    {/* Payment Toggles */}
-                    <div className="pt-4 space-y-4">
-                      <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#0B1120]/50 border border-gray-100 dark:border-white/5">
-                        <div>
-                          <div className="font-bold text-gray-900 dark:text-white">Stripe (Onlayn to'lov)</div>
-                          <div className="text-xs text-gray-500">Kredit/debit karta orqali onlayn to'lash</div>
-                        </div>
-                        <button
-                          onClick={() => setStripeEnabled(!stripeEnabled)}
-                          className={`w-12 h-6 rounded-full transition-colors relative ${stripeEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}
-                        >
-                          <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${stripeEnabled ? 'right-1' : 'left-1'}`} />
-                        </button>
-                      </div>
-
-                      <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#0B1120]/50 border border-gray-100 dark:border-white/5">
-                        <div>
-                          <div className="font-bold text-gray-900 dark:text-white">Karta orqali (Manual)</div>
-                          <div className="text-xs text-gray-500">O'tkazma qilib chek yuborish orqali to'lash</div>
-                        </div>
-                        <button
-                          onClick={() => setManualEnabled(!manualEnabled)}
-                          className={`w-12 h-6 rounded-full transition-colors relative ${manualEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}
-                        >
-                          <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${manualEnabled ? 'right-1' : 'left-1'}`} />
-                        </button>
-                      </div>
-                    </div>
-
-                    <Button
-                      onClick={handleUpdateSettings}
-                      loading={updatingSettings}
-                      className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg rounded-2xl"
-                    >
-                      Saqlash
-                    </Button>
->>>>>>> 70ab5be (Enhance profile with newsletter settings and fix firestore rules)
                   </div>
 
                   <div className="space-y-2">

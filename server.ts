@@ -186,6 +186,7 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
+  const PORT = process.env.PORT || 3000;
   const httpServer = createServer(app);
   const io = new Server(httpServer, { cors: { origin: true, credentials: true } });
 

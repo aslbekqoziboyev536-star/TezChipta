@@ -28,6 +28,8 @@ interface User {
   gender?: string;
   isProfileComplete?: boolean;
   createdAt?: string;
+  lastSeenNotificationAt?: string;
+  newsletterSoundEnabled?: boolean;
 }
 
 interface AuthContextType {
