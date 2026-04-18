@@ -1,43 +1,43 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://ais-dev-ysiohn3rwkkqtccelrvfdl-466552621444.asia-southeast1.run.app/</loc>
+    <loc>https://tez-chipta.vercel.app/</loc>
     <lastmod>2026-04-03</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://ais-dev-ysiohn3rwkkqtccelrvfdl-466552621444.asia-southeast1.run.app/blog</loc>
+    <loc>https://tez-chipta.vercel.app/blog</loc>
     <lastmod>2026-04-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://ais-dev-ysiohn3rwkkqtccelrvfdl-466552621444.asia-southeast1.run.app/statistics</loc>
+    <loc>https://tez-chipta.vercel.app/statistics</loc>
     <lastmod>2026-04-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://ais-dev-ysiohn3rwkkqtccelrvfdl-466552621444.asia-southeast1.run.app/login</loc>
+    <loc>https://tez-chipta.vercel.app/login</loc>
     <lastmod>2026-04-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://ais-dev-ysiohn3rwkkqtccelrvfdl-466552621444.asia-southeast1.run.app/register</loc>
+    <loc>https://tez-chipta.vercel.app/register</loc>
     <lastmod>2026-04-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://ais-dev-ysiohn3rwkkqtccelrvfdl-466552621444.asia-southeast1.run.app/privacy-policy</loc>
+    <loc>https://tez-chipta.vercel.app/privacy-policy</loc>
     <lastmod>2026-04-03</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
-    <loc>https://ais-dev-ysiohn3rwkkqtccelrvfdl-466552621444.asia-southeast1.run.app/termsofservice</loc>
+    <loc>https://tez-chipta.vercel.app/termsofservice</loc>
     <lastmod>2026-04-03</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
