@@ -84,18 +84,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             birthDate = data.birthDate || '';
             passport = data.passport || '';
             address = data.address || '';
-            gender = data.gender || '';
+            // Trust the flag from Firestore if it exists
+            const storedIsProfileComplete = data.isProfileComplete || false;
             
-            const hasAllFields = 
+            const hasAllFields = !!(
               name && 
               email && 
               phoneNumber && 
               birthDate && 
               passport && 
-              address &&
-              gender;
+              address && 
+              gender
+            );
             
-            isProfileComplete = (data.isProfileComplete || false) && !!hasAllFields;
+            // If Firestore says it's complete, or we have all fields, consider it complete
+            isProfileComplete = storedIsProfileComplete || hasAllFields;
+
+            // In case Firestore says it's incomplete but we have all fields, 
+            // we might want to auto-update it, but for now we just allow the user to proceed.
           } else {
             // Initial profile creation if doc doesn't exist
             setDoc(userDocRef, {

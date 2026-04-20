@@ -61,15 +61,15 @@ export const OnboardingModal: React.FC = () => {
       const userRef = doc(db, 'users', user.id);
       const updateData: any = {
         name: formData.fullName,
+        email: formData.email,
+        phoneNumber: formData.phoneNumber,
         birthDate: formData.birthDate,
         passport: formData.passport,
         address: formData.address,
         gender: formData.gender,
-        isProfileComplete: true
+        isProfileComplete: true,
+        updatedAt: new Date().toISOString()
       };
-
-      if (!user.email) updateData.email = formData.email;
-      if (!user.phoneNumber) updateData.phoneNumber = formData.phoneNumber;
 
       // Use the withRetry utility for better resilience
       await withRetry(() => updateDoc(userRef, updateData));

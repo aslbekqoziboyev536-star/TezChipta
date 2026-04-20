@@ -363,7 +363,7 @@ export default function Home() {
         paymentStatus: 'unpaid',
         paymentMethod: 'stripe',
         createdAt: new Date().toISOString(),
-        price: pendingBooking.ride.price,
+        price: Number(pendingBooking.ride.price),
         passengerGender: user.gender || 'male'
       };
 
@@ -411,7 +411,7 @@ export default function Home() {
         paymentStatus: 'unpaid',
         paymentMethod: 'manual',
         createdAt: new Date().toISOString(),
-        price: pendingBooking.ride.price,
+        price: Number(pendingBooking.ride.price),
         passengerGender: user.gender || 'male'
       };
 
@@ -420,9 +420,9 @@ export default function Home() {
       setShowPaymentSelection(false);
       setShowManualPayment(true);
       setTimer(60);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Manual booking failed:", error);
-      toast.error("An error occurred during booking.");
+      toast.error(error.message || "An error occurred during booking.");
     } finally {
       setPaymentMethodLoading(null);
       setBookingLoading(false);
