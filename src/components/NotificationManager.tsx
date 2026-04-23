@@ -60,6 +60,8 @@ export const NotificationManager: React.FC = () => {
           }
         }
       }
+    }, (error) => {
+      console.error("NotificationManager snapshot error:", error);
     });
 
     return () => unsubscribe();

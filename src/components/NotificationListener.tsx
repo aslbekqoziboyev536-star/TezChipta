@@ -80,6 +80,8 @@ export function NotificationListener() {
             } else if (activeNotification && !snapshot.docs.some(d => d.id === activeNotification.id)) {
                 setActiveNotification(null);
             }
+        }, (err) => {
+            console.error("Notifications snapshot error:", err);
         });
 
         // Expose addDismissed to handleClose via a custom event or shared state if needed, 
@@ -115,6 +117,8 @@ export function NotificationListener() {
                     }
                 }
             });
+        }, (err) => {
+            console.error("Admin messages snapshot error:", err);
         });
 
         const reviewsRef = collection(db, 'reviews');
@@ -134,6 +138,8 @@ export function NotificationListener() {
                     }
                 }
             });
+        }, (err) => {
+            console.error("Admin reviews snapshot error:", err);
         });
 
         return () => {

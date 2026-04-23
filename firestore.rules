@@ -171,11 +171,7 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-<<<<<<< HEAD
-      return hasOnlyAllowedFields(['name', 'email', 'phoneNumber', 'role', 'createdAt', 'birthDate', 'passport', 'address', 'isProfileComplete', 'picture', 'gender', 'lastSeenNotificationAt', 'newsletterSoundEnabled']) &&
-=======
-      return (isAdmin() || hasOnlyAllowedFields(['name', 'email', 'phoneNumber', 'role', 'createdAt', 'updatedAt', 'birthDate', 'passport', 'address', 'isProfileComplete', 'picture', 'gender', 'uid'])) &&
->>>>>>> a47f7c4 (Implemented sign in and ticketing)
+      return (isAdmin() || hasOnlyAllowedFields(['name', 'email', 'phoneNumber', 'role', 'createdAt', 'updatedAt', 'birthDate', 'passport', 'address', 'isProfileComplete', 'picture', 'gender', 'uid', 'lastSeenNotificationAt', 'newsletterSoundEnabled'])) &&
              hasRequiredFields(['name', 'role']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              (!('email' in data) || (data.email == "" || isValidEmail(data.email))) &&
