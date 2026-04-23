@@ -158,7 +158,7 @@ export default function Admin() {
       const bookingsCol = collection(db, 'bookings');
       const reviewsCol = collection(db, 'reviews');
       const settingsCol = collection(db, 'settings');
-      const subscribersCol = collection(db, 'subscribers');
+      const subscribersCol = collection(db, 'newsletter_subscribers');
       const newslettersCol = collection(db, 'newsletters');
       const notificationsCol = collection(db, 'notifications');
 
