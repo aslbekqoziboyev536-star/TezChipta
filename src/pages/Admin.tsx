@@ -740,8 +740,9 @@ export default function Admin() {
   const exportSubscribersToExcel = () => {
     const data = subscribers.map(s => ({
       Email: s.email,
-      'Subscribed At': new Date(s.subscribedAt).toLocaleString(),
-      Status: s.status,
+      'Subscribed At': new Date(s.createdAt || s.subscribedAt).toLocaleString(),
+      Status: s.status || 'active',
+      Source: s.source || 'manual',
       'User ID': s.userId || 'Guest'
     }));
 

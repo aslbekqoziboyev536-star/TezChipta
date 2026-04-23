@@ -571,8 +571,9 @@ export default function Home() {
     setNewsletterLoading(true);
     try {
       // Check if already subscribed
-      const subscribersRef = collection(db, 'subscribers');
-      const q = query(subscribersRef, where('email', '==', email), where('status', '==', 'active'));
+      const subscribersRef = collection(db, 'newsletter_subscribers');
+      const emailLower = email.toLowerCase();
+      const q = query(subscribersRef, where('emailLower', '==', emailLower));
       const snapshot = await getDocs(q);
 
       if (!snapshot.empty) {
@@ -583,12 +584,13 @@ export default function Home() {
 
       const subscriberData = {
         email,
+        emailLower,
         userId: user?.id || null,
-        subscribedAt: new Date().toISOString(),
-        status: 'active'
+        createdAt: new Date().toISOString(),
+        source: 'home_footer'
       };
 
-      await addDoc(collection(db, 'subscribers'), subscriberData);
+      await addDoc(collection(db, 'newsletter_subscribers'), subscriberData);
       toast.success(t('home.newsletter.success') || "Siz muvaffaqiyatli obuna bo'ldingiz!");
       emailInput.value = '';
     } catch (error) {

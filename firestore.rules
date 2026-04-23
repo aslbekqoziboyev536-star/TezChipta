@@ -398,11 +398,9 @@ service cloud.firestore {
     }
 
     match /newsletter_subscribers/{subscriberId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || resource.data.emailLower == request.auth.token.email.lower() || isAdmin());
-      allow list: if isAdmin();
+      allow read, list: if true;
       allow create: if true;
-      allow update: if isAdmin();
-      allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow update, delete: if isAdmin() || (isAuthenticated() && (resource.data.userId == request.auth.uid || resource.data.emailLower == request.auth.token.email.lower()));
     }
 
     match /chats/{chatId} {
