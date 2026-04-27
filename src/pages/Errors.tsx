@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { AlertCircle, ArrowLeft, HelpCircle, ShieldAlert, WifiOff, UserX, Lock, CreditCard, Clock, RefreshCw, AlertTriangle, Activity, Server, Settings } from 'lucide-react';
+import { AlertCircle, ArrowLeft, HelpCircle, ShieldAlert, WifiOff, UserX, Lock, CreditCard, Clock, RefreshCw, AlertTriangle, Activity, Server, Settings, Search } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { ThemeToggle } from '../components/ThemeToggle';
 

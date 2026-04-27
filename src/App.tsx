@@ -29,6 +29,7 @@ const PaymentSuccess = lazy(() => import('./pages/PaymentSuccess'));
 const Errors = lazy(() => import('./pages/Errors'));
 const Successful = lazy(() => import('./pages/Successful'));
 const NotFound = lazy(() => import('./pages/NotFound'));
+const TicketView = lazy(() => import('./pages/TicketView'));
 
 const PageLoader = () => (
   <div className="min-h-screen bg-gray-50 dark:bg-[#0B1120] flex items-center justify-center">
@@ -80,6 +81,7 @@ export default function App() {
                   <Route path="/termsofservice" element={<TermsOfService />} />
                   <Route path="/errors" element={<Errors />} />
                   <Route path="/successful" element={<Successful />} />
+                  <Route path="/ticket/:id" element={<TicketView />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>

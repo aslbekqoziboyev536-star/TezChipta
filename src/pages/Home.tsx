@@ -9,6 +9,7 @@ import { SafeImage } from '../components/SafeImage';
 import { db, auth, handleFirestoreError, OperationType, withRetry } from '../firebase';
 import { supabase } from '../lib/supabase';
 import { isValidContact } from '../utils/validation';
+import QRCode from 'qrcode';
 import { useTheme } from '../context/ThemeContext';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { LoadingScreen } from '../components/LoadingScreen';
@@ -55,7 +56,7 @@ export default function Home() {
   const { user, logout } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
-  const [selectedDate, setSelectedDate] = useState<'today' | 'tomorrow' | 'weekly'>('today');
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [searchFrom, setSearchFrom] = useState('');
   const [searchTo, setSearchTo] = useState('');
   const [logoClickCount, setLogoClickCount] = useState(0);
@@ -83,6 +84,15 @@ export default function Home() {
   const [receiptRawFile, setReceiptRawFile] = useState<File | null>(null);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [currentBookingId, setCurrentBookingId] = useState<string | null>(null);
+  const [showPassengerDetails, setShowPassengerDetails] = useState(false);
+  const [passengerDetails, setPassengerDetails] = useState({
+    firstName: '',
+    lastName: '',
+    passportId: '',
+    phone: ''
+  });
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
+  const [generatedTicketUrl, setGeneratedTicketUrl] = useState<string | null>(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' });
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -336,7 +346,7 @@ export default function Home() {
     setSelectedSeat(seatNumber);
   };
 
-  const proceedToPayment = async () => {
+  const proceedToPassengerDetails = () => {
     if (!user) {
       navigate('/login');
       return;
@@ -346,7 +356,23 @@ export default function Home() {
     
     setPendingBooking({ ride: selectedRide, seat: selectedSeat });
     setSelectedRideForSeat(null);
+    setShowPassengerDetails(true);
+  };
+
+  const proceedToPaymentSelection = (e: React.FormEvent) => {
+    e.preventDefault();
+    setShowPassengerDetails(false);
     setShowPaymentSelection(true);
+  };
+
+  const generateTicketUrl = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    const length = Math.floor(Math.random() * 5) + 15;
+    for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
   };
 
   const handleStripePayment = async () => {
@@ -355,6 +381,7 @@ export default function Home() {
     setPaymentMethodLoading('stripe');
     setBookingLoading(true);
     try {
+      const ticketUrl = generateTicketUrl();
       const bookingData = {
         userId: user.id,
         rideId: pendingBooking.ride.id,
@@ -364,7 +391,9 @@ export default function Home() {
         paymentMethod: 'stripe',
         createdAt: new Date().toISOString(),
         price: Number(pendingBooking.ride.price),
-        passengerGender: user.gender || 'male'
+        passengerGender: user.gender || 'male',
+        passengerDetails,
+        ticketUrl
       };
 
       const bookingDoc = await addDoc(collection(db, 'bookings'), bookingData);
@@ -403,6 +432,7 @@ export default function Home() {
     setPaymentMethodLoading('manual');
     setBookingLoading(true);
     try {
+      const ticketUrl = generateTicketUrl();
       const bookingData = {
         userId: user.id,
         rideId: pendingBooking.ride.id,
@@ -412,11 +442,14 @@ export default function Home() {
         paymentMethod: 'manual',
         createdAt: new Date().toISOString(),
         price: Number(pendingBooking.ride.price),
-        passengerGender: user.gender || 'male'
+        passengerGender: user.gender || 'male',
+        passengerDetails,
+        ticketUrl
       };
 
       const bookingDoc = await addDoc(collection(db, 'bookings'), bookingData);
       setCurrentBookingId(bookingDoc.id);
+      setGeneratedTicketUrl(ticketUrl);
       setShowPaymentSelection(false);
       setShowManualPayment(true);
       setTimer(60);
@@ -471,6 +504,14 @@ export default function Home() {
         receiptUploadedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
+
+      try {
+        if (generatedTicketUrl) {
+          const url = `${window.location.origin}/ticket/${generatedTicketUrl}`;
+          const qrDataUrl = await QRCode.toDataURL(url, { width: 256, margin: 2 });
+          setQrCodeDataUrl(qrDataUrl);
+        }
+      } catch (err) { console.error('QR Generate Error', err); }
 
       setShowManualPayment(false);
       setPaymentSuccess(true);
@@ -882,17 +923,13 @@ export default function Home() {
               <div className="space-y-2">
                 <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('home.search.date_label')}</label>
                 <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
-                  <select 
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
+                  <input 
+                    type="date"
                     value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value as 'today' | 'tomorrow' | 'weekly')}
-                    className="w-full bg-gray-50 dark:bg-[#111827] border border-gray-200 dark:border-white/5 rounded-xl py-3 pl-10 pr-4 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none"
-                  >
-                    <option value="today">{getRideCountLabel('today', t('home.search.today'))}</option>
-                    <option value="tomorrow">{getRideCountLabel('tomorrow', t('home.search.tomorrow'))}</option>
-                    <option value="weekly">{getRideCountLabel('weekly', t('home.search.weekly'))}</option>
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="w-full bg-gray-50 dark:bg-[#111827] border border-gray-200 dark:border-white/5 rounded-xl py-3 pl-10 pr-4 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
                 </div>
               </div>
               <Button 
@@ -925,35 +962,16 @@ export default function Home() {
               <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-1 sm:mb-2">{t('home.rides.title')}</h2>
               <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">{t('home.rides.subtitle')}</p>
             </div>
-            <div className="flex bg-gray-100 dark:bg-[#111827] rounded-xl p-1 border border-gray-200 dark:border-white/5 overflow-x-auto scrollbar-hide">
-              {(['today', 'tomorrow', 'weekly'] as const).map((date) => (
-                <Button
-                  key={date}
-                  variant="secondary"
-                  onClick={() => setSelectedDate(date)}
-                  className={`px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg font-medium text-xs sm:text-sm transition-all border-0 h-auto whitespace-nowrap flex-1 sm:flex-none ${
-                    selectedDate === date
-                      ? 'bg-white dark:bg-[#1E293B] text-gray-900 dark:text-white shadow-sm border border-gray-200 dark:border-white/10'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    {date === 'today' ? t('home.search.today') : date === 'tomorrow' ? t('home.search.tomorrow') : t('home.search.weekly')}
-                    {(() => {
-                      const count = getRideCountForDate(date);
-                      return count > 0 ? (
-                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          selectedDate === date 
-                            ? 'bg-emerald-500 text-white' 
-                            : 'bg-emerald-500/10 text-emerald-500'
-                        }`}>
-                          {count}
-                        </span>
-                      ) : null;
-                    })()}
-                  </div>
-                </Button>
-              ))}
+            <div className="flex bg-white dark:bg-[#111827] rounded-xl p-1.5 border border-gray-200 dark:border-white/10 shadow-sm items-center min-w-[200px]">
+              <div className="relative w-full">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500 pointer-events-none" />
+                <input 
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="w-full bg-transparent pl-10 pr-4 py-2 font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-0"
+                />
+              </div>
             </div>
           </div>
 
@@ -1617,13 +1635,42 @@ export default function Home() {
                 <Button
                   disabled={!selectedSeat}
                   loading={bookingLoading}
-                  onClick={proceedToPayment}
+                  onClick={proceedToPassengerDetails}
                   className="px-8 py-3"
                 >{t('home.rides.continue')}</Button>
               </div>
             )}
           </div>
         )}
+      </Modal>
+
+      {/* Passenger Details Modal */}
+      <Modal
+        isOpen={showPassengerDetails}
+        onClose={() => setShowPassengerDetails(false)}
+        title="Yo'lovchi ma'lumotlari"
+      >
+        <form onSubmit={proceedToPaymentSelection} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Ism</label>
+              <input required type="text" value={passengerDetails.firstName} onChange={e => setPassengerDetails({...passengerDetails, firstName: e.target.value})} className="w-full mt-1 px-4 py-2 border border-gray-300 dark:border-white/10 rounded-xl bg-gray-50 dark:bg-[#111827] text-gray-900 dark:text-white" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Familiya</label>
+              <input required type="text" value={passengerDetails.lastName} onChange={e => setPassengerDetails({...passengerDetails, lastName: e.target.value})} className="w-full mt-1 px-4 py-2 border border-gray-300 dark:border-white/10 rounded-xl bg-gray-50 dark:bg-[#111827] text-gray-900 dark:text-white" />
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">ID Karta / Pasport seriyasi va raqami</label>
+            <input required type="text" placeholder="AA1234567" value={passengerDetails.passportId} onChange={e => setPassengerDetails({...passengerDetails, passportId: e.target.value.toUpperCase()})} className="w-full mt-1 px-4 py-2 border border-gray-300 dark:border-white/10 rounded-xl bg-gray-50 dark:bg-[#111827] text-gray-900 dark:text-white uppercase" />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Telefon raqam</label>
+            <input required type="tel" placeholder="+998901234567" value={passengerDetails.phone} onChange={e => setPassengerDetails({...passengerDetails, phone: e.target.value})} className="w-full mt-1 px-4 py-2 border border-gray-300 dark:border-white/10 rounded-xl bg-gray-50 dark:bg-[#111827] text-gray-900 dark:text-white" />
+          </div>
+          <Button type="submit" className="w-full py-3 mt-4 text-lg">To'lovga o'tish</Button>
+        </form>
       </Modal>
 
       {/* Payment Success Modal */}
@@ -1861,33 +1908,51 @@ export default function Home() {
         </div>
       </Modal>
 
-      {/* Payment Success Modal */}
       <Modal
         isOpen={paymentSuccess}
         onClose={() => {
           setPaymentSuccess(false);
           setSelectedSeat(null);
+          setQrCodeDataUrl(null);
         }}
         title="Muvaffaqiyatli!"
       >
         <div className="text-center py-8">
-          <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <ShieldCheck className="w-8 h-8 text-emerald-500" />
-          </div>
-          <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-            {currentBookingId ? "Chek yuborildi!" : "Chipta xarid qilindi!"}
-          </h3>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">
-            {currentBookingId 
-              ? "To'lov cheki adminga yuborildi. Tasdiqlangandan so'ng chiptangiz tayyor bo'ladi."
-              : "To'lov muvaffaqiyatli amalga oshirildi. Chipta ma'lumotlari profilingizda mavjud."}
-          </p>
+          {qrCodeDataUrl ? (
+            <div className="flex flex-col items-center">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                Sizning Chiptangiz
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Avtobusga minayotganda ushbu QR kodni ko'rsating.
+              </p>
+              <div className="bg-white p-4 rounded-xl shadow-sm border mb-6 inline-block">
+                <img src={qrCodeDataUrl} alt="Ticket QR Code" className="w-48 h-48" />
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <ShieldCheck className="w-8 h-8 text-emerald-500" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                {currentBookingId ? "Chek yuborildi!" : "Chipta xarid qilindi!"}
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                {currentBookingId 
+                  ? "To'lov cheki adminga yuborildi. Tasdiqlangandan so'ng chiptangiz tayyor bo'ladi."
+                  : "To'lov muvaffaqiyatli amalga oshirildi. Chipta ma'lumotlari profilingizda mavjud."}
+              </p>
+            </>
+          )}
           <Button
             onClick={() => {
               setPaymentSuccess(false);
               setSelectedSeat(null);
               setCurrentBookingId(null);
               setReceiptFile(null);
+              setQrCodeDataUrl(null);
+              setGeneratedTicketUrl(null);
             }}
             className="w-full py-3"
           >

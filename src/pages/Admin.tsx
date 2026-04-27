@@ -565,7 +565,7 @@ export default function Admin() {
         }
       }
       setShowRideForm(false);
-      setRideForm({ id: '', driverId: '', date: 'today', departureTime: '', arrivalTime: '', price: 0, busType: 'Standard', from: 'Toshkent', to: 'Samarqand', duration: '', rating: 5.0, images: [], status: 'active', totalSeats: 40, seatLayout: '2x2' });
+      setRideForm({ id: '', driverId: '', date: new Date().toISOString().split('T')[0], departureTime: '', arrivalTime: '', price: 0, busType: 'Standard', from: 'Toshkent', to: 'Samarqand', duration: '', rating: 5.0, images: [], status: 'active', totalSeats: 40, seatLayout: '2x2' });
     } catch (err: any) {
       console.error("Error saving ride:", err);
       try {
@@ -1405,11 +1405,7 @@ export default function Admin() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sana</label>
-                      <select required value={rideForm.date} onChange={e => setRideForm({...rideForm, date: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
-                        <option value="today">Bugun</option>
-                        <option value="tomorrow">Ertaga</option>
-                        <option value="weekly">Haftalik</option>
-                      </select>
+                      <input type="date" required value={rideForm.date} onChange={e => setRideForm({...rideForm, date: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-300 dark:border-white/10 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ketish vaqti</label>
