@@ -1,3 +1,4 @@
+// Last Build Trigger: 2026-04-29T10:25:00
 import React, { useState, useEffect, useRef } from 'react';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { Button } from '../components/ui/Button';
