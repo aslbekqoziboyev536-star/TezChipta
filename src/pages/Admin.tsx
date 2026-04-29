@@ -5,7 +5,7 @@ import { Button } from '../components/ui/Button';
 import { LayoutDashboard, Bus, Users, Settings, LogOut, Plus, Edit2, Trash2, Star, HelpCircle, Database, X, Moon, Sun, MessageCircle, Mail, Search, CloudSun, CreditCard, TrendingUp, ShieldCheck, User, Copy, Clock, Menu, Send, Bell } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { collection, getDocs, doc, deleteDoc, addDoc, updateDoc, setDoc, query, orderBy, onSnapshot, increment, where } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, deleteDoc, addDoc, updateDoc, setDoc, query, orderBy, onSnapshot, increment, where } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import * as XLSX from 'xlsx';
 import { isValidPhone } from '../utils/validation';
