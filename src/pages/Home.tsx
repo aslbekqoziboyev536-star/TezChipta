@@ -62,6 +62,7 @@ export default function Home() {
   const [logoClickCount, setLogoClickCount] = useState(0);
   const [lastClickTime, setLastClickTime] = useState(0);
   const [activeRideMenu, setActiveRideMenu] = useState<string | null>(null);
+  const [isFiltered, setIsFiltered] = useState(false);
   
   // Modals state
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
@@ -79,6 +80,9 @@ export default function Home() {
   const [adminSupportPhone, setAdminSupportPhone] = useState('');
   const [stripeEnabled, setStripeEnabled] = useState(true);
   const [manualEnabled, setManualEnabled] = useState(true);
+  const [paymeEnabled, setPaymeEnabled] = useState(true);
+  const [clickEnabled, setClickEnabled] = useState(true);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'stripe' | 'manual' | 'payme' | 'click' | null>(null);
   const [timer, setTimer] = useState(60); // 1 minute
   const [receiptFile, setReceiptFile] = useState<string | null>(null);
   const [receiptRawFile, setReceiptRawFile] = useState<File | null>(null);
@@ -125,7 +129,7 @@ export default function Home() {
 
   const [faqsList, setFaqsList] = useState<any[]>([
     {
-      question: t('home.faq.q1'),
+      question: t('Birinchi savol'),
       answer: t('home.faq.a1')
     },
     {
@@ -221,6 +225,8 @@ export default function Home() {
           setAdminSupportPhone(paymentSettings.adminSupportPhone || '');
           setStripeEnabled(paymentSettings.stripeEnabled !== false);
           setManualEnabled(paymentSettings.manualEnabled !== false);
+          setPaymeEnabled(paymentSettings.paymeEnabled !== false);
+          setClickEnabled(paymentSettings.clickEnabled !== false);
         }
 
         setRides(ridesData);
@@ -290,12 +296,12 @@ export default function Home() {
   const uniqueFromCities = Array.from(new Set(rides.map(r => r.from))).filter(Boolean).sort();
   const uniqueToCities = Array.from(new Set(rides.map(r => r.to))).filter(Boolean).sort();
 
-  const filteredRides = rides.filter(ride => {
-    const matchesDate = ride.date === selectedDate;
+  const filteredRides = isFiltered ? rides.filter(ride => {
+    const matchesDate = !selectedDate || ride.date === selectedDate;
     const matchesFrom = !searchFrom || ride.from === searchFrom;
     const matchesTo = !searchTo || ride.to === searchTo;
     return matchesDate && matchesFrom && matchesTo;
-  });
+  }) : rides;
   const selectedDriver = drivers.find(d => d.id === selectedDriverId);
   const selectedRide = rides.find(r => r.id === selectedRideForSeat);
 
@@ -426,10 +432,11 @@ export default function Home() {
     }
   };
 
-  const handleManualPayment = async () => {
+  const handleManualPayment = async (method: 'manual' | 'payme' | 'click' = 'manual') => {
     if (!pendingBooking || !user) return;
 
-    setPaymentMethodLoading('manual');
+    setSelectedPaymentMethod(method);
+    setPaymentMethodLoading(method === 'manual' ? 'manual' : null); // We don't have separate loading states for payme/click yet
     setBookingLoading(true);
     try {
       const ticketUrl = generateTicketUrl();
@@ -439,7 +446,7 @@ export default function Home() {
         seatNumber: pendingBooking.seat,
         status: 'pending',
         paymentStatus: 'unpaid',
-        paymentMethod: 'manual',
+        paymentMethod: method,
         createdAt: new Date().toISOString(),
         price: Number(pendingBooking.ride.price),
         passengerGender: user.gender || 'male',
@@ -454,7 +461,7 @@ export default function Home() {
       setShowManualPayment(true);
       setTimer(60);
     } catch (error: any) {
-      console.error("Manual booking failed:", error);
+      console.error(`${method} booking failed:`, error);
       toast.error(error.message || "An error occurred during booking.");
     } finally {
       setPaymentMethodLoading(null);
@@ -934,13 +941,25 @@ export default function Home() {
               </div>
               <Button 
                 onClick={() => {
-                  const element = document.getElementById('rides');
-                  if (element) element.scrollIntoView({ behavior: 'smooth' });
+                  if (isFiltered) {
+                    setIsFiltered(false);
+                    setSearchFrom('');
+                    setSearchTo('');
+                    setSelectedDate(new Date().toISOString().split('T')[0]);
+                  } else {
+                    setIsFiltered(true);
+                    const element = document.getElementById('rides');
+                    if (element) element.scrollIntoView({ behavior: 'smooth' });
+                  }
                 }}
-                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.3)]"
-                leftIcon={<Search className="w-5 h-5" />}
+                className={`w-full font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.3)] ${
+                  isFiltered 
+                    ? 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20' 
+                    : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/20'
+                }`}
+                leftIcon={isFiltered ? <CloseIcon className="w-5 h-5" /> : <Search className="w-5 h-5" />}
               >
-                {t('home.search.btn')}
+                {isFiltered ? t('home.search.clear') : t('home.search.btn')}
               </Button>
             </div>
           </div>
@@ -961,17 +980,6 @@ export default function Home() {
             <div>
               <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-1 sm:mb-2">{t('home.rides.title')}</h2>
               <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">{t('home.rides.subtitle')}</p>
-            </div>
-            <div className="flex bg-white dark:bg-[#111827] rounded-xl p-1.5 border border-gray-200 dark:border-white/10 shadow-sm items-center min-w-[200px]">
-              <div className="relative w-full">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500 pointer-events-none" />
-                <input 
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-full bg-transparent pl-10 pr-4 py-2 font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-0"
-                />
-              </div>
             </div>
           </div>
 
@@ -1127,7 +1135,7 @@ export default function Home() {
               </AnimatePresence>
               {filteredRides.length === 0 && (
                 <div className="col-span-1 lg:col-span-2 text-center py-12 text-gray-500">
-                  Bu sanada qatnovlar topilmadi.
+                  {t('home.rides.empty')}
                 </div>
               )}
             </div>
@@ -1393,7 +1401,7 @@ export default function Home() {
                 {t('home.footer.desc') || "Xorazmdan Toshkentga va qaytish yo'nalishida eng qulay, tez va xavfsiz avtobus qatnovlari."}
               </p>
               <div className="flex items-center space-x-4">
-                <a href="https://instagram.com/cognifycompany" target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 flex items-center justify-center hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-all group">
+                <a href="https://instagram.com/tezchipta" target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 flex items-center justify-center hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-all group">
                   <Instagram className="w-5 h-5 text-gray-500 dark:text-gray-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-500" />
                 </a>
                 <a href="https://t.me/cognifycompany" target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 flex items-center justify-center hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-all group">
@@ -1782,11 +1790,51 @@ export default function Home() {
             </motion.button>
           )}
 
+          {paymeEnabled && (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => handleManualPayment('payme')}
+              className="w-full flex items-center justify-between p-6 rounded-2xl bg-gray-50 dark:bg-[#0B1120] border border-gray-200 dark:border-white/10 hover:border-emerald-500 transition-all group h-auto disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-teal-500/10 rounded-xl flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center text-[10px] font-black text-white">Pay</div>
+                </div>
+                <div className="text-left">
+                  <div className="font-bold text-gray-900 dark:text-white">Payme</div>
+                  <div className="text-xs text-gray-500">{t('home.payment.payme')}</div>
+                </div>
+              </div>
+              <ChevronDown className="w-5 h-5 text-gray-400 rotate-[-90deg]" />
+            </motion.button>
+          )}
+
+          {clickEnabled && (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => handleManualPayment('click')}
+              className="w-full flex items-center justify-between p-6 rounded-2xl bg-gray-50 dark:bg-[#0B1120] border border-gray-200 dark:border-white/10 hover:border-emerald-500 transition-all group h-auto disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-blue-500/10 rounded-xl flex items-center justify-center">
+                   <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-[10px] font-black text-white">Click</div>
+                </div>
+                <div className="text-left">
+                  <div className="font-bold text-gray-900 dark:text-white">Click</div>
+                  <div className="text-xs text-gray-500">{t('home.payment.click')}</div>
+                </div>
+              </div>
+              <ChevronDown className="w-5 h-5 text-gray-400 rotate-[-90deg]" />
+            </motion.button>
+          )}
+
           {manualEnabled && (
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={handleManualPayment}
+              onClick={() => handleManualPayment('manual')}
               disabled={paymentMethodLoading !== null}
               className="w-full flex items-center justify-between p-6 rounded-2xl bg-gray-50 dark:bg-[#0B1120] border border-gray-200 dark:border-white/10 hover:border-emerald-500 transition-all group h-auto disabled:opacity-70 disabled:cursor-not-allowed"
             >
@@ -1795,8 +1843,8 @@ export default function Home() {
                   <Armchair className="w-6 h-6 text-emerald-500" />
                 </div>
                 <div className="text-left">
-                  <div className="font-bold text-gray-900 dark:text-white">Karta orqali (Manual)</div>
-                  <div className="text-xs text-gray-500">Karta raqamiga o'tkazma va chek yuklash</div>
+                  <div className="font-bold text-gray-900 dark:text-white">{t('home.payment.manual')}</div>
+                  <div className="text-xs text-gray-500">{t('home.payment.manual_desc')}</div>
                 </div>
               </div>
               {paymentMethodLoading === 'manual' ? (
@@ -1819,12 +1867,17 @@ export default function Home() {
       <Modal
         isOpen={showManualPayment}
         onClose={() => setShowManualPayment(false)}
-        title="Karta orqali to'lov"
+        title={selectedPaymentMethod === 'payme' ? 'Payme orqali to\'lov' : selectedPaymentMethod === 'click' ? 'Click orqali to\'lov' : 'Karta orqali to\'lov'}
       >
         <div className="space-y-6">
           <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 p-4 rounded-xl">
             <p className="text-sm text-amber-700 dark:text-amber-400 font-medium text-center">
-              Quyidagi karta raqamiga {pendingBooking && formatPrice(pendingBooking.ride.price)} o'tkazing va chekni yuklang.
+              {selectedPaymentMethod === 'payme' 
+                ? `Payme ilovasida "Karta raqamiga o'tkazma" bo'limiga o'ting, quyidagi raqamga ${pendingBooking && formatPrice(pendingBooking.ride.price)} o'tkazing va chek rasmiga olib yuklang.`
+                : selectedPaymentMethod === 'click'
+                ? `Click ilovasida quyidagi karta raqamiga ${pendingBooking && formatPrice(pendingBooking.ride.price)} o'tkazing va to'lov chekini rasmga olib yuklang.`
+                : `Quyidagi karta raqamiga ${pendingBooking && formatPrice(pendingBooking.ride.price)} o'tkazing va chekni yuklang.`
+              }
             </p>
           </div>
 

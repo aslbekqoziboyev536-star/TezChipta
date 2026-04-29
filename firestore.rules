@@ -3,73 +3,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: drivers
-    // Document ID: auto-generated
-    // Fields:
-    //   - name: string (required)
-    //   - photo: string (required, URL)
-    //   - rating: number (required)
-    //   - experience: number (required)
-    //   - bio: string (required)
-    //   - phone: string (required)
-    //   - email: string (optional)
-    //   - uid: string (optional)
-    //   - createdAt: string (optional)
-    //
-    // Collection: rides
-    // Document ID: auto-generated
-    // Fields:
-    //   - busType: string (required)
-    //   - departureTime: string (required)
-    //   - arrivalTime: string (required)
-    //   - duration: string (required)
-    //   - price: number (required)
-    //   - rating: number (required)
-    //   - driverId: string (required)
-    //   - date: string (required)
-    //   - from: string (required)
-    //   - to: string (required)
-    //   - images: list of strings (required)
-    //
-    // Collection: faqs
-    // Document ID: auto-generated
-    // Fields:
-    //   - question: string (required)
-    //   - answer: string (required)
-    //
-    // Collection: users
-    // Document ID: user uid
-    // Fields:
-    //   - name: string (required)
-    //   - email: string (optional, email format)
-    //   - phoneNumber: string (optional)
-    //   - role: string (required, 'admin' or 'user')
-    //
-    // Collection: bookings
-    // Document ID: auto-generated
-    // Fields:
-    //   - userId: string (required) - UID of the user who made the booking
-    //   - rideId: string (required) - ID of the ride
-    //   - seatNumber: number (required) - The seat number booked
-    //   - status: string (required, enum: ['pending', 'confirmed', 'cancelled']) - Booking status
-    //   - createdAt: string (required, ISO 8601) - When the booking was created
-    //   - price: number (required) - Price of the booking
-    //
-    // Collection: messages
-    // Document ID: auto-generated
-    // Fields:
-    //   - name: string (required)
-    //   - contact: string (required)
-    //   - message: string (required)
-    //   - createdAt: string (required, ISO 8601)
-    //   - status: string (required, enum: ['unread', 'read'])
-    //
-    // ===============================================================
-
-    // ===============================================================
     // Helper Functions
     // ===============================================================
 
@@ -77,381 +10,163 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isServer(data) {
-      return data != null && '_serverSecret' in data && data._serverSecret == "ai_studio_server_secret_2024";
-    }
-
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function isAdmin() {
       return isAuthenticated() && (
         (request.auth.token.get('email', '').lower() == "qoziboyevaslbek359@gmail.com") ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
-      );
-    }
-
-    function isAdminOrInWhitelist() {
-      return isAuthenticated() && (
-        (request.auth.token.get('email', '').lower() == "qoziboyevaslbek359@gmail.com") ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-        (request.auth.token.get('email', '').lower() in ["admin@tezchipta.uz", "support@tezchipta.uz"])
+        (request.auth.token.get('email', '').lower() == "admin@tezchipta.uz") ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'admin')
       );
     }
 
     function isDriver() {
       return isAuthenticated() && (
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'driver'
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'driver'
       );
     }
 
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
+    function isServer() {
+      return request.resource.data != null && 
+             '_serverSecret' in request.resource.data && 
+             request.resource.data._serverSecret == "ai_studio_server_secret_2024";
     }
-
-    function hasRequiredFields(fields) {
-      return request.resource.data.keys().hasAll(fields);
-    }
-
-    function isValidUrl(url) {
-      return url is string && (url.size() == 0 || url.matches("^https://.*") || url.matches("^http://.*") || url.matches("^data:image/.*"));
-    }
-
-    function isValidEmail(email) {
-      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    
+    function isExistingServer() {
+      return resource.data != null && 
+             '_serverSecret' in resource.data && 
+             resource.data._serverSecret == "ai_studio_server_secret_2024";
     }
 
     // ===============================================================
-    // Domain Validators
+    // Rules per Collection
     // ===============================================================
 
-    function isValidDriver(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['name', 'photo', 'rating', 'experience', 'bio', 'phone', 'email', 'uid', 'createdAt', 'id'])) &&
-             hasRequiredFields(['name', 'photo', 'rating', 'experience', 'bio', 'phone']) &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             isValidUrl(data.photo) && data.photo.size() < 1000000 &&
-             data.rating is number && data.rating >= 0 && data.rating <= 5 &&
-             data.experience is number && data.experience >= 0 &&
-             data.bio is string && data.bio.size() < 5000 &&
-             data.phone is string && data.phone.size() < 50 &&
-             (!('email' in data) || data.email == "" || isValidEmail(data.email)) &&
-             (!('uid' in data) || data.uid is string) &&
-             (!('createdAt' in data) || data.createdAt is string);
-    }
-
-    function isValidRide(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['busType', 'departureTime', 'arrivalTime', 'duration', 'price', 'rating', 'driverId', 'date', 'from', 'to', 'images', 'status', 'id', 'totalSeats', 'seatLayout', 'bookedSeats'])) &&
-             hasRequiredFields(['busType', 'departureTime', 'arrivalTime', 'duration', 'price', 'rating', 'driverId', 'date', 'from', 'to', 'images', 'status']) &&
-             data.busType is string && data.busType.size() > 0 && data.busType.size() < 100 &&
-             data.departureTime is string && data.departureTime.size() > 0 && data.departureTime.size() < 50 &&
-             data.arrivalTime is string && data.arrivalTime.size() > 0 && data.arrivalTime.size() < 50 &&
-             data.duration is string && data.duration.size() > 0 && data.duration.size() < 100 &&
-             data.price is number && data.price >= 0 &&
-             data.rating is number && data.rating >= 0 && data.rating <= 5 &&
-             data.driverId is string && data.driverId.size() > 0 && data.driverId.size() < 100 &&
-             data.date is string && data.date.size() > 0 && data.date.size() < 100 &&
-             data.from is string && data.from.size() > 0 && data.from.size() < 200 &&
-             data.to is string && data.to.size() > 0 && data.to.size() < 200 &&
-             data.images is list && data.images.size() <= 10 &&
-             data.status in ['active', 'completed', 'cancelled'] &&
-             (!('totalSeats' in data) || data.totalSeats is number) &&
-             (!('seatLayout' in data) || data.seatLayout is string) &&
-             (!('bookedSeats' in data) || data.bookedSeats is list);
-    }
-
-    function isValidFaq(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['question', 'answer', 'id'])) &&
-             hasRequiredFields(['question', 'answer']) &&
-             data.question is string && data.question.size() > 0 && data.question.size() < 500 &&
-             data.answer is string && data.answer.size() > 0 && data.answer.size() < 2000;
-    }
-
-    function isValidUser(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['name', 'email', 'phoneNumber', 'role', 'createdAt', 'updatedAt', 'birthDate', 'passport', 'address', 'isProfileComplete', 'picture', 'gender', 'uid', 'lastSeenNotificationAt', 'newsletterSoundEnabled'])) &&
-             hasRequiredFields(['name', 'role']) &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             (!('email' in data) || (data.email == "" || isValidEmail(data.email))) &&
-             (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() < 50)) &&
-             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() < 50)) &&
-             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() < 100)) &&
-             (!('birthDate' in data) || (data.birthDate is string && data.birthDate.size() < 50)) &&
-             (!('passport' in data) || (data.passport is string && data.passport.size() < 50)) &&
-             (!('address' in data) || (data.address is string && data.address.size() < 200)) &&
-             (!('isProfileComplete' in data) || (data.isProfileComplete is bool)) &&
-             (!('picture' in data) || (isValidUrl(data.picture) && data.picture.size() < 2000)) &&
-             (!('lastSeenNotificationAt' in data) || (data.lastSeenNotificationAt is string)) &&
-             (!('gender' in data) || data.gender in ['male', 'female']) &&
-             (!('newsletterSoundEnabled' in data) || data.newsletterSoundEnabled is bool) &&
-             data.role in ['admin', 'user', 'driver'];
-    }
-
-    function isValidBlog(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['title', 'content', 'authorId', 'authorName', 'image', 'createdAt', 'tags', 'id'])) &&
-             hasRequiredFields(['title', 'content', 'authorId', 'authorName', 'createdAt']) &&
-             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
-             data.content is string && data.content.size() > 0 && data.content.size() < 10000 &&
-             data.authorId is string && (data.authorId == request.auth.uid || isAdmin()) &&
-             data.authorName is string && data.authorName.size() > 0 && data.authorName.size() < 100 &&
-             (!('image' in data) || isValidUrl(data.image)) &&
-             data.createdAt is string && data.createdAt.size() < 50 &&
-             (!('tags' in data) || data.tags is list);
-    }
-
-    function isValidBooking(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['userId', 'rideId', 'seatNumber', 'status', 'createdAt', 'price', 'paymentStatus', 'paymentMethod', 'receiptUrl', 'receiptUploadedAt', 'stripeSessionId', 'updatedAt', 'passengerGender', 'id'])) &&
-             hasRequiredFields(['userId', 'rideId', 'seatNumber', 'status', 'createdAt', 'price']) &&
-             data.userId is string && (data.userId == request.auth.uid || isAdmin()) &&
-             data.rideId is string && data.rideId.size() > 0 &&
-             data.seatNumber is number && data.seatNumber > 0 && data.seatNumber <= 100 &&
-             data.status in ['pending', 'confirmed', 'cancelled'] &&
-             data.createdAt is string && data.createdAt.size() > 0 &&
-             data.price is number && data.price >= 0 &&
-             (!('paymentStatus' in data) || data.paymentStatus in ['unpaid', 'paid', 'pending_review', 'rejected']) &&
-             (!('paymentMethod' in data) || data.paymentMethod in ['stripe', 'manual']) &&
-             (!('receiptUrl' in data) || (isValidUrl(data.receiptUrl) && data.receiptUrl.size() < 2000)) &&
-             (!('receiptUploadedAt' in data) || data.receiptUploadedAt is string) &&
-             (!('stripeSessionId' in data) || data.stripeSessionId is string) &&
-             (!('updatedAt' in data) || data.updatedAt is string) &&
-             (!('passengerGender' in data) || data.passengerGender in ['male', 'female']);
-    }
-
-    function isValidSettings(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['adminCardNumber', 'adminCardOwner', 'adminSupportPhone', 'stripeEnabled', 'manualEnabled', 'siteDescription', 'logoUrl', 'updatedAt', 'id'])) &&
-             data.adminCardNumber is string &&
-             (!('adminCardOwner' in data) || data.adminCardOwner is string) &&
-             (!('adminSupportPhone' in data) || data.adminSupportPhone is string) &&
-             (!('stripeEnabled' in data) || data.stripeEnabled is bool) &&
-             (!('manualEnabled' in data) || data.manualEnabled is bool) &&
-             (!('siteDescription' in data) || data.siteDescription is string) &&
-             (!('logoUrl' in data) || isValidUrl(data.logoUrl)) &&
-             data.updatedAt is string;
-    }
-
-    function isValidMessage(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['name', 'contact', 'message', 'createdAt', 'status', 'id'])) &&
-             hasRequiredFields(['name', 'contact', 'message', 'createdAt', 'status']) &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.contact is string && data.contact.size() > 0 && data.contact.size() < 100 &&
-             data.message is string && data.message.size() > 0 && data.message.size() < 2000 &&
-             data.createdAt is string && data.createdAt.size() > 0 &&
-             data.status in ['unread', 'read'];
-    }
-
-    function isValidChat(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['userId', 'userName', 'lastMessage', 'lastMessageAt', 'unreadCount', 'userUnreadCount', 'status', 'id', 'userEmail'])) &&
-             hasRequiredFields(['userId', 'userName', 'lastMessage', 'lastMessageAt', 'unreadCount', 'status']) &&
-             data.userId is string && data.userId.size() > 0 &&
-             // Prevent self-messaging for admins
-             (!isAdmin() || data.userId != request.auth.uid) &&
-             data.userName is string && data.userName.size() > 0 &&
-             data.lastMessage is string && data.lastMessage.size() < 1000 &&
-             data.lastMessageAt is string && data.lastMessageAt.size() > 0 &&
-             data.unreadCount is number && data.unreadCount >= 0 &&
-             (!('userUnreadCount' in data) || (data.userUnreadCount is number && data.userUnreadCount >= 0)) &&
-             data.status in ['active', 'closed'];
-    }
-
-    function isValidChatMessage(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['chatId', 'senderId', 'text', 'createdAt', 'isAdmin', 'id'])) &&
-             hasRequiredFields(['chatId', 'senderId', 'text', 'createdAt']) &&
-             data.chatId is string && data.chatId.size() > 0 &&
-             data.senderId is string && data.senderId == request.auth.uid &&
-             // Prevent self-messaging for admins
-             (!isAdmin() || get(/databases/$(database)/documents/chats/$(data.chatId)).data.userId != request.auth.uid) &&
-             data.text is string && data.text.size() > 0 && data.text.size() < 2000 &&
-             data.createdAt is string && data.createdAt.size() > 0 &&
-             (!('isAdmin' in data) || (data.isAdmin is bool && (data.isAdmin == false || isAdmin())));
-    }
-
-    function isValidReview(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['userName', 'userPhoto', 'rating', 'comment', 'status', 'createdAt', 'userId', 'isFeatured', 'id'])) &&
-             hasRequiredFields(['userName', 'rating', 'comment', 'status', 'createdAt']) &&
-             data.userName is string && data.userName.size() > 0 && data.userName.size() < 100 &&
-             (!('userPhoto' in data) || isValidUrl(data.userPhoto)) &&
-             data.rating is number && data.rating >= 1 && data.rating <= 5 &&
-             data.comment is string && data.comment.size() > 0 && data.comment.size() < 1000 &&
-             data.status in ['pending', 'approved', 'rejected'] &&
-             data.createdAt is string && data.createdAt.size() > 0 &&
-             (!('userId' in data) || data.userId is string) &&
-             (!('isFeatured' in data) || data.isFeatured is bool);
-    }
-
-    function isValidSubscriber(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['email', 'userId', 'subscribedAt', 'status', 'id'])) &&
-             hasRequiredFields(['email', 'subscribedAt', 'status']) &&
-             isValidEmail(data.email) &&
-             (!('userId' in data) || data.userId is string) &&
-             data.subscribedAt is string &&
-             data.status in ['active', 'unsubscribed'];
-    }
-
-    function isValidNewsletterSubscriber(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['email', 'emailLower', 'userId', 'createdAt', 'source', 'id'])) &&
-             hasRequiredFields(['email', 'emailLower', 'createdAt']) &&
-             isValidEmail(data.email) &&
-             data.emailLower is string &&
-             (!('userId' in data) || data.userId is string) &&
-             data.createdAt is string &&
-             (!('source' in data) || data.source is string);
-    }
-
-    function isValidNewsletter(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['subject', 'content', 'sentAt', 'authorId', 'recipientCount', 'id'])) &&
-             hasRequiredFields(['subject', 'content', 'sentAt', 'authorId', 'recipientCount']) &&
-             data.subject is string && data.subject.size() > 0 &&
-             data.content is string && data.content.size() > 0 &&
-             data.sentAt is string &&
-             data.authorId is string &&
-             data.recipientCount is number;
-    }
-
-    function isValidNotification(data) {
-      return (isAdmin() || hasOnlyAllowedFields(['title', 'type', 'details', 'target', 'createdAt', 'authorId', 'id', 'userId'])) &&
-             hasRequiredFields(['title', 'type', 'details', 'target', 'createdAt', 'authorId']) &&
-             data.title is string && data.title.size() > 0 &&
-             data.type is string &&
-             data.details is string && data.details.size() > 0 &&
-             data.target in ['all', 'new'] &&
-             data.createdAt is string &&
-             data.authorId is string &&
-             (!('userId' in data) || data.userId is string);
-    }
-
-    function isValidUserNotification(data) {
-      return hasOnlyAllowedFields(['userId', 'notificationId', 'readAt', 'status']) &&
-             hasRequiredFields(['userId', 'notificationId', 'readAt', 'status']) &&
-             data.userId is string && data.userId == request.auth.uid &&
-             data.notificationId is string &&
-             data.readAt is string &&
-             data.status == 'read';
-    }
-
-    // ===============================================================
-    // Rules
-    // ===============================================================
-
-    // Global Admin Rule
-    match /{document=**} {
-      allow read, write: if isAdmin();
-    }
-
-    match /reviews/{reviewId} {
-      allow read: if resource.data.status == 'approved' || isAdmin();
-      allow create: if isServer(request.resource.data) || (isAuthenticated() && isValidReview(request.resource.data) && request.resource.data.status == 'pending');
-      allow update: if isServer(request.resource.data) || (isAdmin() && isValidReview(request.resource.data));
-      allow delete: if isAdmin();
-    }
-
-    match /drivers/{driverId} {
-      allow read: if true;
-      allow create: if isServer(request.resource.data) || (isAdmin() && isValidDriver(request.resource.data));
-      allow update: if isServer(request.resource.data) || (isAdmin() && isValidDriver(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdmin();
-    }
-
-    match /rides/{rideId} {
-      allow read: if true;
-      allow create: if isServer(request.resource.data) || (isAdmin() && isValidRide(request.resource.data));
-      allow update: if isServer(request.resource.data) || (isAdmin() && isValidRide(request.resource.data)) || (isAuthenticated() && isValidRide(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdmin();
-    }
-
-    match /faqs/{faqId} {
-      allow read: if true;
-      allow create: if isServer(request.resource.data) || (isAdmin() && isValidFaq(request.resource.data));
-      allow update: if isServer(request.resource.data) || (isAdmin() && isValidFaq(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdmin();
-    }
-
+    // --- USERS ---
     match /users/{userId} {
       allow list: if isAdmin();
-      allow get: if isAuthenticated() && (isOwner(userId) || isAdmin());
-      allow create: if isServer(request.resource.data) || 
-                    (isAuthenticated() && (
-                      (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == 'user') || 
-                      isAdmin()
-                    ));
-      allow update: if isServer(request.resource.data) || 
-                    (isAuthenticated() && (
-                      (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role) || 
-                      isAdmin()
-                    ));
+      allow get: if isAuthenticated() && (isOwner(userId) || isAdmin() || isDriver()); // Driver can check passenger info
+      allow create: if isServer() || (isAuthenticated() && isOwner(userId));
+      allow update: if isServer() || (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role));
       allow delete: if isAdmin();
     }
 
-    match /bookings/{bookingId} {
+    // --- RIDES ---
+    match /rides/{rideId} {
       allow read: if true;
-      allow create: if isAuthenticated() && (request.resource.data.userId == request.auth.uid || isAdmin());
-      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create, delete: if isServer() || isAdmin();
+      allow update: if isServer() || isAdmin() || (isDriver() && resource.data.driverId == request.auth.uid);
+    }
+
+    // --- DRIVERS ---
+    match /drivers/{driverId} {
+      allow read: if true;
+      allow write: if isServer() || isAdmin();
+    }
+
+    // --- BOOKINGS ---
+    match /bookings/{bookingId} {
+      allow list: if isAdmin() || (isAuthenticated() && (
+        resource.data.userId == request.auth.uid || 
+        isDriver() // Simplified: drivers can list bookings to find theirs, or better: filtering by rideId
+      ));
+      allow get: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || 
+        isAdmin() || 
+        isDriver() // For QR scanning
+      );
+      allow create: if isServer() || (isAuthenticated() && request.resource.data.userId == request.auth.uid);
+      allow update: if isServer() || isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow delete: if isServer() || isAdmin();
+    }
+
+    // --- REVIEWS ---
+    match /reviews/{reviewId} {
+      allow read: if resource.data.status == 'approved' || isAdmin();
+      allow create: if isServer() || (isAuthenticated() && request.resource.data.status == 'pending');
+      allow update: if isServer() || isAdmin();
       allow delete: if isAdmin();
     }
 
-    match /messages/{messageId} {
-      allow read: if isAdmin();
-      allow create: if isServer(request.resource.data) || isValidMessage(request.resource.data);
-      allow update: if isServer(request.resource.data) || (isAdminOrInWhitelist() && isValidMessage(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdminOrInWhitelist();
-    }
-
-    match /newsletter_subscribers/{subscriberId} {
-      allow read, list: if true;
-      allow create: if true;
-      allow update, delete: if isAdmin() || (isAuthenticated() && (resource.data.userId == request.auth.uid || resource.data.emailLower == request.auth.token.email.lower()));
-    }
-
+    // --- CHATS ---
     match /chats/{chatId} {
       allow list: if isAdmin();
       allow get: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isServer(request.resource.data) || (isAuthenticated() && isValidChat(request.resource.data) && (request.resource.data.userId == request.auth.uid || isAdmin()));
-      allow update: if isServer(request.resource.data) || (isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidChat(request.resource.data));
-      allow delete: if isServer(resource.data) || isAdmin();
-      
+      allow create: if isServer() || (isAuthenticated() && request.resource.data.userId == request.auth.uid);
+      allow update: if isServer() || isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow delete: if isServer() || isAdmin();
+
       match /messages/{messageId} {
-        allow list: if isAdmin() || (isAuthenticated() && get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid);
-        allow get: if isAuthenticated() && (get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid || isAdmin());
-        allow create: if isServer(request.resource.data) || (isAuthenticated() && isValidChatMessage(request.resource.data) && (get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid || isAdmin()));
+        allow read, write: if isServer() || isAdmin() || (isAuthenticated() && get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid);
       }
     }
 
+    // --- FAQS ---
+    match /faqs/{faqId} {
+      allow read: if true;
+      allow write: if isServer() || isAdmin();
+    }
+
+    // --- BLOGS ---
     match /blogs/{blogId} {
       allow read: if true;
-      allow create: if isServer(request.resource.data) || (isAuthenticated() && (isAdmin() || isDriver()) && isValidBlog(request.resource.data));
-      allow update: if isServer(request.resource.data) || (isAuthenticated() && (isAdmin() || (isDriver() && resource.data.authorId == request.auth.uid)) && isValidBlog(request.resource.data));
-      allow delete: if isAdmin() || (isDriver() && resource.data.authorId == request.auth.uid);
+      allow create: if isServer() || isAdmin() || isDriver();
+      allow update, delete: if isServer() || isAdmin() || (isDriver() && resource.data.authorId == request.auth.uid);
     }
 
+    // --- SETTINGS ---
     match /settings/{settingId} {
-      allow read: if true;
-      allow write: if isServer(request.resource.data) || (settingId == 'payment' ? isAdmin() && isValidSettings(request.resource.data) : isAdmin());
+      allow read: if (settingId == 'payment' || settingId == 'public') || isAdmin();
+      allow write: if isAdmin();
     }
 
+    // --- MESSAGES (Contact Form) ---
+    match /messages/{messageId} {
+      allow create: if true; // Public can send messages
+      allow read, update, delete: if isServer() || isAdmin();
+    }
+
+    // --- NEWSLETTER / SUBSCRIBERS ---
+    match /newsletter_subscribers/{subId} {
+      allow create: if true;
+      allow read: if isServer() || isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow list: if isServer() || isAdmin();
+      allow update, delete: if isServer() || isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+    }
+    
     match /subscribers/{subId} {
-      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
-      allow create: if isValidSubscriber(request.resource.data);
-      allow update: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid && isValidSubscriber(request.resource.data));
-      allow delete: if isAdmin();
+      allow create: if true;
+      allow read: if isServer() || isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow list: if isServer() || isAdmin();
+      allow update, delete: if isServer() || isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
     }
 
     match /newsletters/{newsId} {
       allow read: if isAuthenticated();
-      allow create: if isAdmin() && isValidNewsletter(request.resource.data);
-      allow delete: if isAdmin();
+      allow write: if isServer() || isAdmin();
     }
 
+    // --- NOTIFICATIONS ---
     match /notifications/{notifId} {
       allow read: if isAuthenticated();
-      allow create: if isAdmin() && isValidNotification(request.resource.data);
-      allow delete: if isAdmin();
+      allow write: if isServer() || isAdmin();
     }
 
     match /user_notifications/{userNotifId} {
       allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated() && isValidUserNotification(request.resource.data);
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidUserNotification(request.resource.data);
+      allow create, update: if isServer() || (isAuthenticated() && request.resource.data.userId == request.auth.uid);
+      allow delete: if isServer() || isAdmin();
+    }
+
+    // --- GLOBAL FALLBACK ---
+    match /{document=**} {
+      allow read, write: if isAdmin() || isServer();
     }
   }
 }

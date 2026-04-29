@@ -58,6 +58,13 @@ export default function Admin() {
   const [adminSupportPhone, setAdminSupportPhone] = useState('');
   const [stripeEnabled, setStripeEnabled] = useState(true);
   const [manualEnabled, setManualEnabled] = useState(true);
+  const [paymeEnabled, setPaymeEnabled] = useState(true);
+  const [clickEnabled, setClickEnabled] = useState(true);
+  const [paymeMerchantId, setPaymeMerchantId] = useState('');
+  const [paymeSecretKey, setPaymeSecretKey] = useState('');
+  const [clickServiceId, setClickServiceId] = useState('');
+  const [clickMerchantId, setClickMerchantId] = useState('');
+  const [clickSecretKey, setClickSecretKey] = useState('');
   const [siteDescription, setSiteDescription] = useState("TezChipta - O'zbekiston bo'ylab avtobus qatnovlari uchun chiptalarni onlayn sotib olish tizimi. Bizning platformamiz orqali siz uyingizdan chiqmasdan turib, o'zingizga qulay vaqt va yo'nalishni tanlashingiz, chiptalarni Stripe yoki karta orqali to'lov qilib xarid qilishingiz mumkin. Xavfsiz va qulay sayohat TezChipta bilan boshlanadi!");
   const [updatingSettings, setUpdatingSettings] = useState(false);
   const [paymentActionLoading, setPaymentActionLoading] = useState<string | null>(null);
@@ -225,6 +232,20 @@ export default function Admin() {
         setAdminSupportPhone(paymentSettings.adminSupportPhone || '');
         setStripeEnabled(paymentSettings.stripeEnabled !== false);
         setManualEnabled(paymentSettings.manualEnabled !== false);
+        setPaymeEnabled(paymentSettings.paymeEnabled !== false);
+        setClickEnabled(paymentSettings.clickEnabled !== false);
+        
+        // Fetch sensitive keys from a separate document
+        const keysDoc = await getDoc(doc(db, "settings", "merchant_keys"));
+        if (keysDoc.exists()) {
+          const keysData = keysDoc.data();
+          setPaymeMerchantId(keysData.paymeMerchantId || '');
+          setPaymeSecretKey(keysData.paymeSecretKey || '');
+          setClickServiceId(keysData.clickServiceId || '');
+          setClickMerchantId(keysData.clickMerchantId || '');
+          setClickSecretKey(keysData.clickSecretKey || '');
+        }
+        
         if (paymentSettings.siteDescription) {
           setSiteDescription(paymentSettings.siteDescription);
         }
@@ -721,7 +742,19 @@ export default function Admin() {
           adminSupportPhone,
           stripeEnabled,
           manualEnabled,
+          paymeEnabled,
+          clickEnabled,
           siteDescription,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+
+        // Save sensitive keys to a separate protected document
+        await setDoc(doc(db, "settings", "merchant_keys"), {
+          paymeMerchantId,
+          paymeSecretKey,
+          clickServiceId,
+          clickMerchantId,
+          clickSecretKey,
           updatedAt: new Date().toISOString()
         }, { merge: true });
       } catch (err) {
@@ -2458,6 +2491,94 @@ export default function Admin() {
                       >
                         <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${stripeEnabled ? 'right-1' : 'left-1'}`} />
                       </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-gray-50 dark:bg-[#0B1120]/50 border border-gray-100 dark:border-white/5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-gray-900 dark:text-white">Payme</div>
+                          <div className="text-xs text-gray-500">Payme merchant sozlamalari</div>
+                        </div>
+                        <button
+                          onClick={() => setPaymeEnabled(!paymeEnabled)}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${paymeEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+                        >
+                          <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${paymeEnabled ? 'right-1' : 'left-1'}`} />
+                        </button>
+                      </div>
+                      {paymeEnabled && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase">Merchant ID</label>
+                            <input
+                              type="text"
+                              value={paymeMerchantId}
+                              onChange={(e) => setPaymeMerchantId(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-sm text-gray-900 dark:text-white"
+                              placeholder="Merchant ID"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase">Secret Key</label>
+                            <input
+                              type="password"
+                              value={paymeSecretKey}
+                              onChange={(e) => setPaymeSecretKey(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-sm text-gray-900 dark:text-white"
+                              placeholder="Secret Key"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-gray-50 dark:bg-[#0B1120]/50 border border-gray-200 dark:border-white/5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-gray-900 dark:text-white">Click</div>
+                          <div className="text-xs text-gray-500">Click merchant sozlamalari</div>
+                        </div>
+                        <button
+                          onClick={() => setClickEnabled(!clickEnabled)}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${clickEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+                        >
+                          <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${clickEnabled ? 'right-1' : 'left-1'}`} />
+                        </button>
+                      </div>
+                      {clickEnabled && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase">Service ID</label>
+                            <input
+                              type="text"
+                              value={clickServiceId}
+                              onChange={(e) => setClickServiceId(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-sm text-gray-900 dark:text-white"
+                              placeholder="Service ID"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase">Merchant ID</label>
+                            <input
+                              type="text"
+                              value={clickMerchantId}
+                              onChange={(e) => setClickMerchantId(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-sm text-gray-900 dark:text-white"
+                              placeholder="Merchant ID"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase">Secret Key</label>
+                            <input
+                              type="password"
+                              value={clickSecretKey}
+                              onChange={(e) => setClickSecretKey(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-sm text-gray-900 dark:text-white"
+                              placeholder="Secret Key"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#0B1120]/50 border border-gray-100 dark:border-white/5">

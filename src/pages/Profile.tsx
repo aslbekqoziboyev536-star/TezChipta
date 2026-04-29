@@ -245,11 +245,11 @@ export default function Profile() {
       const docRef = await addDoc(collection(db, 'newsletter_subscribers'), payload);
       setIsSubscribed(true);
       setSubscriptionId(docRef.id);
-      toast.success("Muvaffaqiyatli obuna bo'ldingiz!");
+      toast.success(t('profile.newsletter.success'));
       checkSubscription(); // Refresh history
     } catch (error) {
       console.error("Error subscribing:", error);
-      toast.error("Obuna bo'lishda xatolik yuz berdi");
+      toast.error(t('profile.newsletter.error'));
     } finally {
       setCheckingSubscription(false);
     }
@@ -264,10 +264,10 @@ export default function Profile() {
       await deleteDoc(doc(db, 'newsletter_subscribers', subscriptionId));
       setIsSubscribed(false);
       setSubscriptionId(null);
-      toast.success("Obuna to'xtatildi");
+      toast.success(t('profile.newsletter.unsubscribe_success'));
     } catch (error) {
       console.error("Error unsubscribing:", error);
-      toast.error("Xatolik yuz berdi");
+      toast.error(t('profile.newsletter.error'));
     } finally {
       setCheckingSubscription(false);
     }
@@ -566,7 +566,7 @@ export default function Profile() {
                   <div className="flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl border border-emerald-100 dark:border-emerald-500/20">
                     <div className="flex items-center gap-3">
                       <Check className="w-5 h-5 text-emerald-500" />
-                      <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Siz obuna bo'lgansiz</span>
+                      <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">{t('profile.newsletter.subscribed')}</span>
                     </div>
                     <Button
                       variant="secondary"
@@ -574,24 +574,29 @@ export default function Profile() {
                       onClick={handleNewsletterUnsubscribe}
                       className="text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 border-0 h-auto py-1"
                     >
-                      Bekor qilish
+                      {t('profile.newsletter.unsubscribe_btn')}
                     </Button>
                   </div>
 
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-bold text-gray-700 dark:text-gray-200">Ovozli bildirishnomalar</span>
-                      <button
-                        onClick={handleToggleSound}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${soundEnabled ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-gray-700'}`}
-                      >
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${soundEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                      </button>
+                      <span className="text-sm font-bold text-gray-700 dark:text-gray-200">{t('profile.newsletter.sound')}</span>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${soundEnabled ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-500'}`}>
+                          {soundEnabled ? t('common.on') : t('common.off')}
+                        </span>
+                        <button
+                          onClick={handleToggleSound}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${soundEnabled ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-gray-700'}`}
+                        >
+                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${soundEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                      </div>
                     </div>
                   </div>
 
                   <div className="space-y-4">
-                    <h4 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Xabarlar tarixi</h4>
+                    <h4 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">{t('profile.newsletter.history')}</h4>
                     {newsletterHistory.length > 0 ? (
                       <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                         {newsletterHistory.map((nl) => (
@@ -605,7 +610,7 @@ export default function Profile() {
                         ))}
                       </div>
                     ) : (
-                      <p className="text-sm text-gray-500 text-center py-4">Hozircha xabarlar yo'q.</p>
+                      <p className="text-sm text-gray-500 text-center py-4">{t('profile.newsletter.empty')}</p>
                     )}
                   </div>
                 </div>
@@ -614,15 +619,15 @@ export default function Profile() {
                   <div className="w-12 h-12 bg-blue-50 dark:bg-blue-500/10 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Mail className="w-6 h-6" />
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-                    Yangi chegirmalar va yangiliklardan xabardor bo'lish uchun obuna bo'ling.
-                  </p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                      {t('home.footer.newsletter_desc')}
+                    </p>
                   <Button
                     onClick={handleNewsletterSubscribe}
                     className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-500/20"
                     leftIcon={<Mail className="w-5 h-5" />}
                   >
-                    Obuna bo'lish
+                    {t('profile.newsletter.subscribe_btn')}
                   </Button>
                 </div>
               )}
@@ -702,7 +707,7 @@ export default function Profile() {
             <div>
               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2 ml-2">
                 <SafeImage src={logoUrl} alt="Tez Chipta" className="w-6 h-6 object-contain" />
-                Mening chiptalarim
+                {t('profile.tickets.title')}
               </h3>
 
             {bookings.length === 0 ? (
@@ -710,13 +715,13 @@ export default function Profile() {
                 <div className="w-16 h-16 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Bus className="w-8 h-8 text-gray-400" />
                 </div>
-                <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Hali chiptalar yo'q</h4>
-                <p className="text-gray-600 dark:text-gray-400 mb-6">Siz hali birorta ham reysga chipta xarid qilmagansiz.</p>
+                <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">{t('profile.tickets.none')}</h4>
+                <p className="text-gray-600 dark:text-gray-400 mb-6">{t('profile.tickets.none_desc')}</p>
                 <Button
                   onClick={() => navigate('/')}
                   className="px-6 py-2.5 bg-emerald-500 text-white rounded-xl font-medium hover:bg-emerald-600 transition-colors h-auto"
                 >
-                  Reyslarni qidirish
+                  {t('profile.tickets.search_btn')}
                 </Button>
               </div>
             ) : (
@@ -742,7 +747,7 @@ export default function Profile() {
                               ) : booking.paymentStatus === 'pending_review' ? (
                                 <>
                                   <Clock className="w-3.5 h-3.5" />
-                                  To'lov tekshirilmoqda
+                                  {t('profile.tickets.status.checking_payment')}
                                 </>
                               ) : booking.status === 'cancelled' ? (
                                 <>
@@ -778,7 +783,7 @@ export default function Profile() {
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4 pt-3 sm:pt-4 border-t border-gray-50 dark:border-white/5">
                           <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-sm text-gray-600 dark:text-gray-400">
                             <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500" />
-                            <span>{booking.ride?.date === 'today' ? 'Bugun' : booking.ride?.date === 'tomorrow' ? 'Ertaga' : booking.ride?.date}</span>
+                            <span>{booking.ride?.date === 'today' ? t('home.search.today') : booking.ride?.date === 'tomorrow' ? t('home.search.tomorrow') : booking.ride?.date}</span>
                           </div>
                           <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-sm text-gray-600 dark:text-gray-400">
                             <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500" />
@@ -792,7 +797,7 @@ export default function Profile() {
                       </div>
 
                       <div className="sm:text-right flex flex-row sm:flex-col justify-between sm:justify-center items-center sm:items-end gap-2 border-t sm:border-t-0 sm:border-l border-gray-100 dark:border-white/5 pt-4 sm:pt-0 sm:pl-6">
-                        <div className="text-sm text-gray-500 dark:text-gray-400">To'langan:</div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">{t('profile.tickets.paid')}:</div>
                         <div className="text-xl font-bold text-emerald-500 mb-2">{formatPrice(booking.price)}</div>
                         {booking.status === 'confirmed' && (
                           <div className="flex flex-col gap-2 w-full sm:w-auto">
@@ -804,7 +809,7 @@ export default function Profile() {
                               className="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border-0"
                               leftIcon={<Download className="w-4 h-4" />}
                             >
-                              Chipta
+                              {t('profile.tickets.download_btn')}
                             </Button>
                             <Button
                               size="sm"
