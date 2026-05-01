@@ -2,173 +2,227 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ===============================================================
-    // Helper Functions
-    // ===============================================================
 
-    function isAuthenticated() {
-      return request.auth != null && request.auth.uid != null;
+    // =========================
+    // HELPERS
+    // =========================
+
+    function isAuth() {
+      return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+    function uid() {
+      return request.auth.uid;
     }
 
-    function hasUserDoc() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    function email() {
+      return request.auth.token.email;
     }
 
     function userDoc() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return get(/databases/$(database)/documents/users/$(uid()));
+    }
+
+    function userExists() {
+      return isAuth() &&
+        exists(/databases/$(database)/documents/users/$(uid()));
+    }
+
+    function role() {
+      return userExists() ? userDoc().data.role : "guest";
     }
 
     function isAdmin() {
-      return isAuthenticated() && (
-        (request.auth.token.email != null && (
-          request.auth.token.email == "qoziboyevaslbek359@gmail.com" ||
-          request.auth.token.email == "admin@tezchipta.uz"
-        )) ||
-        (hasUserDoc() && userDoc().data.role == 'admin')
+      return isAuth() && (
+        email() == "qoziboyevaslbek359@gmail.com" ||
+        email() == "admin@tezchipta.uz" ||
+        role() == "admin"
       );
     }
 
     function isDriver() {
-      return isAuthenticated() && (
-        hasUserDoc() && userDoc().data.role == 'driver'
-      );
+      return isAuth() && role() == "driver";
     }
 
-    // ===============================================================
-    // Rules per Collection
-    // ===============================================================
+    function isUser() {
+      return isAuth() && role() == "user";
+    }
 
-    // --- USERS ---
+    // =========================
+    // USERS
+    // =========================
     match /users/{userId} {
-      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin() || isDriver());
-      allow create: if isAuthenticated() && isOwner(userId);
-      allow update: if isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role);
-      allow delete: if isAdmin();
-    }
 
-    // --- RIDES ---
-    match /rides/{rideId} {
-      allow read: if true;
-      allow create, update, delete: if isAdmin();
-    }
+      allow create: if isAuth() && uid() == userId;
 
-    // --- DRIVERS ---
-    match /drivers/{driverId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // --- BOOKINGS ---
-    match /bookings/{bookingId} {
-      // CREATE
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-
-      // READ (Includes GET and LIST)
-      allow read: if isAuthenticated() && resource != null && (
-        resource.data.userId == request.auth.uid ||
+      allow read: if isAuth() && (
+        uid() == userId ||
         isAdmin() ||
         isDriver()
       );
 
-      // UPDATE
-      allow update: if isAuthenticated() && resource != null && (
-        resource.data.userId == request.auth.uid ||
-        isAdmin()
+      allow update: if isAuth() && (
+        isAdmin() ||
+        uid() == userId
       );
 
-      // DELETE
       allow delete: if isAdmin();
     }
 
-    // --- REVIEWS ---
-    match /reviews/{reviewId} {
-      allow read: if true; 
-      allow create: if isAuthenticated() && (
-        request.resource.data.status == null || 
-        request.resource.data.status == 'pending'
+    // =========================
+    // RIDES (public read, admin write)
+    // =========================
+    match /rides/{rideId} {
+
+      allow read: if true;
+
+      allow write: if isAdmin();
+    }
+
+    // =========================
+    // DRIVERS
+    // =========================
+    match /drivers/{driverId} {
+
+      allow read: if isAuth();
+
+      allow write: if isAdmin();
+    }
+
+    // =========================
+    // BOOKINGS (CRITICAL)
+    // =========================
+    match /bookings/{bookingId} {
+
+      allow create: if isAuth()
+        && request.resource.data.userId == uid();
+
+      allow read: if isAuth() && (
+        resource.data.userId == uid() ||
+        isAdmin() ||
+        isDriver()
       );
+
+      allow update: if isAuth() && (
+        isAdmin() ||
+        resource.data.userId == uid()
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // =========================
+    // REVIEWS
+    // =========================
+    match /reviews/{reviewId} {
+
+      allow read: if true;
+
+      allow create: if isAuth()
+        && request.resource.data.userId == uid();
+
       allow update, delete: if isAdmin();
     }
 
-    // --- CHATS ---
+    // =========================
+    // CHATS
+    // =========================
     match /chats/{chatId} {
-      allow read: if isAuthenticated() && resource != null && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update: if isAuthenticated() && resource != null && (resource.data.userId == request.auth.uid || isAdmin());
+
+      allow read, create, update: if isAuth()
+        && resource.data.userId == uid();
+
       allow delete: if isAdmin();
 
       match /messages/{messageId} {
-        allow read, write: if isAuthenticated() && (
-          (exists(/databases/$(database)/documents/chats/$(chatId)) && 
-           get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid) || 
-          isAdmin()
-        );
+
+        allow read, write: if isAuth();
       }
     }
 
-    // --- FAQS ---
-    match /faqs/{faqId} {
+    // =========================
+    // SETTINGS (admin only)
+    // =========================
+    match /settings/{id} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // =========================
+    // NOTIFICATIONS
+    // =========================
+    match /notifications/{id} {
+
+      allow read: if isAuth() && (
+        isAdmin() ||
+        resource.data.userId == uid()
+      );
+
+      allow write: if isAdmin();
+    }
+
+    match /user_notifications/{id} {
+
+      allow read: if isAuth() &&
+        resource.data.userId == uid();
+
+      allow create: if isAuth()
+        && request.resource.data.userId == uid();
+
+      allow update, delete: if isAuth()
+        && resource.data.userId == uid();
+    }
+
+    // =========================
+    // BLOGS
+    // =========================
+    match /blogs/{id} {
+
       allow read: if true;
-      allow write: if isAdmin();
+
+      allow create: if isAuth() && (
+        isAdmin() || isDriver()
+      );
+
+      allow update: if isAuth() && (
+        isAdmin() ||
+        (isDriver() && resource.data.authorId == uid())
+      );
+
+      allow delete: if isAdmin();
     }
 
-    // --- BLOGS ---
-    match /blogs/{blogId} {
-      allow read: if true;
-      allow create: if isAdmin() || isDriver();
-      allow update, delete: if isAdmin() || (isDriver() && resource.data.authorId == request.auth.uid);
-    }
+    // =========================
+    // NEWSLETTER
+    // =========================
+    match /newsletter_subscribers/{id} {
 
-    // --- SETTINGS ---
-    match /settings/{settingId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // --- MESSAGES (Contact Form) ---
-    match /messages/{messageId} {
       allow create: if true;
-      allow read, update, delete: if isAdmin();
+
+      allow read: if isAuth() &&
+        resource.data.userId == uid();
+
+      allow update, delete: if isAuth() &&
+        resource.data.userId == uid() ||
+        isAdmin();
     }
 
-    // --- NEWSLETTER / SUBSCRIBERS ---
-    match /newsletter_subscribers/{subId} {
+    match /subscribers/{id} {
+
       allow create: if true;
-      allow read: if isAdmin() || (isAuthenticated() && resource != null && resource.data.userId == request.auth.uid);
-      allow update, delete: if isAdmin() || (isAuthenticated() && resource != null && resource.data.userId == request.auth.uid);
-    }
-    
-    match /subscribers/{subId} {
-      allow create: if true;
-      allow read: if isAdmin() || (isAuthenticated() && resource != null && resource.data.userId == request.auth.uid);
-      allow update, delete: if isAdmin() || (isAuthenticated() && resource != null && resource.data.userId == request.auth.uid);
+
+      allow read: if isAuth() &&
+        resource.data.userId == uid() ||
+        isAdmin();
+
+      allow update, delete: if isAdmin();
     }
 
-    match /newsletters/{newsId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    // --- NOTIFICATIONS ---
-    match /notifications/{notifId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    match /user_notifications/{userNotifId} {
-      allow read: if isAuthenticated() && resource != null && resource.data.userId == request.auth.uid;
-      allow create, update: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow delete: if isAdmin() || (isAuthenticated() && resource != null && resource.data.userId == request.auth.uid);
-    }
-
-    // --- GLOBAL FALLBACK ---
+    // =========================
+    // DEFAULT DENY (IMPORTANT)
+    // =========================
     match /{document=**} {
-      allow read, write: if isAdmin();
+      allow read, write: if false;
     }
   }
 }
