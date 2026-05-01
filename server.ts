@@ -253,8 +253,8 @@ app.use(helmet({
   contentSecurityPolicy: isProduction ? {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://apis.google.com", "https://*.stripe.com", "https://www.gstatic.com", "https://*.firebaseapp.com", "https://va.vercel-scripts.com"],
-      scriptSrcElem: ["'self'", "'unsafe-inline'", "https://apis.google.com", "https://*.stripe.com", "https://www.gstatic.com", "https://*.firebaseapp.com", "https://va.vercel-scripts.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://apis.google.com", "https://accounts.google.com", "https://*.stripe.com", "https://www.gstatic.com", "https://*.firebaseapp.com", "https://va.vercel-scripts.com"],
+      scriptSrcElem: ["'self'", "'unsafe-inline'", "https://apis.google.com", "https://accounts.google.com", "https://*.stripe.com", "https://www.gstatic.com", "https://*.firebaseapp.com", "https://va.vercel-scripts.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://www.gstatic.com"],
       imgSrc: ["'self'", "data:", "https:", "http:", "blob:", "https://*.googleusercontent.com", "https://*.gstatic.com", "https://*.stripe.com", "https://www.gstatic.com", "https://picsum.photos", "https://imagehosting-hulf.onrender.com", "https://placehold.co", "https://cdn-icons-png.flaticon.com", "https://*.firebaseapp.com"],
       connectSrc: [
@@ -267,6 +267,7 @@ app.use(helmet({
         "https://*.firebaseapp.com",
         "https://api.open-meteo.com",
         "https://va.vercel-scripts.com",
+        "https://vitals.vercel-insights.com",
         "wss://*.firebaseio.com",
         "wss://*.run.app", 
         "wss://*.supabase.co", 
@@ -277,7 +278,7 @@ app.use(helmet({
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
-      frameSrc: ["'self'", "https://*.stripe.com", "https://*.google.com", "https://*.firebaseapp.com", "https://hooks.stripe.com"],
+      frameSrc: ["'self'", "https://*.stripe.com", "https://*.google.com", "https://accounts.google.com", "https://*.firebaseapp.com", "https://hooks.stripe.com"],
     },
   } : false,
   crossOriginEmbedderPolicy: false,
