@@ -231,7 +231,7 @@ export default function Home() {
         const satisfactionRate = Math.round((avgRating / 5) * 100);
 
         setStats({
-          todaySales: todayBookingsSnapshot.size,
+          todaySales: todaySales,
           satisfaction: satisfactionRate || 100,
           experience: 1, // Start with 1 year
           driversCount: driversData.length
