@@ -91,11 +91,21 @@ export default function Home() {
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [currentBookingId, setCurrentBookingId] = useState<string | null>(null);
   const [showPassengerDetails, setShowPassengerDetails] = useState(false);
-  const [passengerDetails, setPassengerDetails] = useState({
-    firstName: '',
-    lastName: '',
-    passportId: '',
-    phone: ''
+  const [passengerDetails, setPassengerDetails] = useState(() => {
+    const saved = localStorage.getItem('passengerDetails');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Error parsing saved passenger details", e);
+      }
+    }
+    return {
+      firstName: '',
+      lastName: '',
+      passportId: '',
+      phone: ''
+    };
   });
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
   const [generatedTicketUrl, setGeneratedTicketUrl] = useState<string | null>(null);
@@ -364,12 +374,25 @@ export default function Home() {
     
     setPendingBooking({ ride: selectedRide, seat: selectedSeat });
     setSelectedRideForSeat(null);
-    setShowPassengerDetails(true);
+    
+    // Check if details are already filled (Persistent feature)
+    const isFilled = passengerDetails.firstName && 
+                     passengerDetails.lastName && 
+                     passengerDetails.passportId && 
+                     passengerDetails.phone;
+
+    if (isFilled) {
+      setShowPaymentSelection(true);
+    } else {
+      setShowPassengerDetails(true);
+    }
     track('booking');
   };
 
   const proceedToPaymentSelection = (e: React.FormEvent) => {
     e.preventDefault();
+    // Save details for next time (Persistent feature)
+    localStorage.setItem('passengerDetails', JSON.stringify(passengerDetails));
     setShowPassengerDetails(false);
     setShowPaymentSelection(true);
   };
@@ -1782,6 +1805,27 @@ export default function Home() {
         title={t('home.payment.title')}
       >
         <div className="space-y-4">
+          {/* Passenger Details Summary (Persistent feature) */}
+          <div className="p-4 bg-gray-100/50 dark:bg-[#0B1120] rounded-2xl border border-gray-200 dark:border-white/5 mb-2">
+            <div className="flex justify-between items-center mb-2">
+              <h4 className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Yo'lovchi ma'lumotlari</h4>
+              <button 
+                onClick={() => {
+                  setShowPaymentSelection(false);
+                  setShowPassengerDetails(true);
+                }}
+                className="text-xs text-emerald-500 hover:text-emerald-600 font-bold transition-colors"
+              >
+                O'zgartirish
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-900 dark:text-white font-medium">
+              <div className="truncate">{passengerDetails.firstName} {passengerDetails.lastName}</div>
+              <div className="text-right">{passengerDetails.passportId}</div>
+              <div className="col-span-2 text-xs text-gray-500">{passengerDetails.phone}</div>
+            </div>
+          </div>
+
           {stripeEnabled && (
             <motion.button
               whileHover={{ scale: 1.02 }}
