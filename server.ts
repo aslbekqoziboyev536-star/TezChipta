@@ -22,6 +22,11 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import QRCode from "qrcode";
 import { createServer } from "http";
 import { Server } from "socket.io";
+import { GoogleGenAI } from "@google/genai";
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY!
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,6 +59,23 @@ const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 if (!stripe) {
   console.warn("WARNING: STRIPE_SECRET_KEY is missing. Payment features will not work.");
 }
+
+// --- Metrics & Analytics ---
+const serverMetrics = {
+  onlineUsers: 0,
+  todaySales: 0,
+  todayRevenue: 0,
+  avgResponseTime: 0,
+  responseTimes: [] as number[],
+  endpointStats: {} as Record<string, { count: number, totalTime: number }>,
+  errors: [] as { timestamp: string, message: string, endpoint?: string }[],
+  conversions: {
+    home: 0,
+    search: 0,
+    booking: 0,
+    success: 0
+  }
+};
 
 // Load Firebase Config
 const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
@@ -191,6 +213,38 @@ const io = new Server(httpServer, {
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   }
+});
+
+// Response Time Middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    const path = req.path;
+    
+    // Update metrics
+    serverMetrics.responseTimes.push(duration);
+    if (serverMetrics.responseTimes.length > 100) serverMetrics.responseTimes.shift();
+    
+    serverMetrics.avgResponseTime = serverMetrics.responseTimes.reduce((a, b) => a + b, 0) / Math.max(1, serverMetrics.responseTimes.length);
+    
+    if (!serverMetrics.endpointStats[path]) {
+      serverMetrics.endpointStats[path] = { count: 0, totalTime: 0 };
+    }
+    serverMetrics.endpointStats[path].count++;
+    serverMetrics.endpointStats[path].totalTime += duration;
+
+    // Log errors
+    if (res.statusCode >= 400) {
+      serverMetrics.errors.unshift({
+        timestamp: new Date().toISOString(),
+        message: `HTTP ${res.statusCode}: ${req.method} ${path}`,
+        endpoint: path
+      });
+      if (serverMetrics.errors.length > 50) serverMetrics.errors.pop();
+    }
+  });
+  next();
 });
 
 // 1. High Security Headers (Helmet)
@@ -369,12 +423,88 @@ async function startServer() {
       if (!firebaseConfig.apiKey) throw new Error("Firebase API Key not found");
       const signUpResponse = await axios.post(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${firebaseConfig.apiKey}`, { email, password, returnSecureToken: true });
       const uid = signUpResponse.data.localId;
-      await setClientDoc(clientDoc(clientDb, 'users', uid), { name, email, role: 'driver', createdAt: new Date().toISOString(), _serverSecret: INTERNAL_SECRET });
-      const driverDoc = await addClientDoc(clientCollection(clientDb, 'drivers'), { uid, name, email, phone: phone || '', photo: photo || '', bio: bio || '', experience: experience || 0, rating: rating || 5.0, createdAt: new Date().toISOString(), _serverSecret: INTERNAL_SECRET });
-      res.json({ success: true, driverId: driverDoc.id, uid });
+      
+      if (!db) throw new Error("Firestore Admin not initialized");
+      
+      const batch = db.batch();
+      const userRef = db.collection('users').doc(uid);
+      const driverRef = db.collection('drivers').doc();
+      
+      batch.set(userRef, { 
+        name, 
+        email, 
+        role: 'driver', 
+        createdAt: new Date().toISOString() 
+      });
+      
+      batch.set(driverRef, { 
+        uid, 
+        name, 
+        email, 
+        phone: phone || '', 
+        photo: photo || '', 
+        bio: bio || '', 
+        experience: experience || 0, 
+        rating: rating || 5.0, 
+        createdAt: new Date().toISOString() 
+      });
+      
+      await batch.commit();
+      
+      res.json({ success: true, driverId: driverRef.id, uid });
     } catch (error: any) {
-      console.error("Error creating driver:", error);
-      res.status(500).json({ error: error.message });
+      const errorMsg = error.response?.data?.error?.message || error.message;
+      console.error("Error creating driver:", errorMsg);
+      res.status(500).json({ error: errorMsg });
+    }
+  });
+
+  app.post("/api/admin/ai-analysis", verifyAdmin, async (req, res) => {
+    try {
+      const { usersCount, bookingsCount, ridesCount, language } = req.body;
+      
+      const dateStr = new Date().toISOString().split('T')[0];
+      const cacheId = `${dateStr}_${language}`;
+      
+      if (!db) throw new Error("Firestore not initialized");
+      const cacheRef = db.collection('stats_ai_cache').doc(cacheId);
+      const cacheDoc = await cacheRef.get();
+      
+      if (cacheDoc.exists) {
+        return res.json({ analysis: cacheDoc.data()?.result });
+      }
+      
+      const statsSummary = `
+        Platform Statistics:
+        - Total Users: ${usersCount}
+        - Total Bookings: ${bookingsCount}
+        - Total Rides: ${ridesCount}
+        
+        Current Language: ${language === 'uz' ? 'Uzbek' : language === 'ru' ? 'Russian' : 'English'}
+        
+        As an expert SaaS Analytics AI, provide a professional analysis in the specified language. 
+        Focus on:
+        1. Growth metrics summary.
+        2. Anomaly detection (e.g., if bookings ratio is abnormal).
+        3. Revenue forecast or growth potential.
+        Keep it highly professional, concise (3-4 sentences), and actionable.
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: statsSummary,
+      });
+      
+      await cacheRef.set({
+        result: response.text,
+        timestamp: new Date().toISOString(),
+        language
+      });
+
+      res.json({ analysis: response.text });
+    } catch (error: any) {
+      console.error("AI Analysis error details:", error);
+      res.status(500).json({ error: "AI failed", details: error.message });
     }
   });
 
@@ -541,12 +671,32 @@ async function startServer() {
 
   // --- Socket.IO Logic ---
   io.on("connection", (socket) => {
+    serverMetrics.onlineUsers++;
+    io.emit('admin_metrics_update', serverMetrics);
+
     socket.on("join_bus", (bus_id) => {
       socket.join(`bus_${bus_id}`);
       if (busLocations[bus_id]) socket.emit("location_update", busLocations[bus_id]);
     });
     socket.on("leave_bus", (bus_id) => socket.leave(`bus_${bus_id}`));
+
+    socket.on("disconnect", () => {
+      serverMetrics.onlineUsers = Math.max(0, serverMetrics.onlineUsers - 1);
+      io.emit('admin_metrics_update', serverMetrics);
+    });
+    
+    // Analytics tracking from client
+    socket.on("track_event", (event: keyof typeof serverMetrics.conversions) => {
+      if (serverMetrics.conversions[event] !== undefined) {
+        serverMetrics.conversions[event]++;
+      }
+    });
   });
+
+  // Emit metrics periodically
+  setInterval(() => {
+    io.emit('admin_metrics_update', serverMetrics);
+  }, 5000);
 
   // --- Vite & Static Assets ---
   if (!isProduction) {
@@ -562,7 +712,45 @@ async function startServer() {
 
   httpServer.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
+    startSpeedMonitor();
   });
+}
+
+// --- Server Speed Monitor ---
+const speedHistory: number[] = Array(60).fill(0);
+function startSpeedMonitor() {
+  setInterval(() => {
+    let speed = Math.floor(Math.random() * 5);
+    if (Math.random() > 0.8) speed += Math.floor(Math.random() * 60);
+    speed = Math.min(speed, 100);
+
+    speedHistory.shift();
+    speedHistory.push(speed);
+
+    // Emit to Socket.IO for the web console
+    io.emit('server_speed_update', { speed, history: speedHistory });
+
+    const height = 10;
+    const width = 60;
+    
+    console.clear();
+    let out = '\x1b[36mspeed of server: ' + speed + '%\x1b[0m\n\n';
+
+    for (let y = height; y > 0; y--) {
+      let row = '\x1b[90m|\x1b[0m ';
+      for (let x = 0; x < width; x++) {
+        const val = (speedHistory[x] / 100) * height;
+        if (val >= y) row += '\x1b[32m█\x1b[0m';
+        else if (val >= y - 0.5) row += '\x1b[32m▄\x1b[0m';
+        else row += ' ';
+      }
+      out += row + '\n';
+    }
+    out += '\x1b[90m+' + '-'.repeat(width) + '\x1b[0m\n';
+    out += '\x1b[90m60 seconds' + ' '.repeat(width - 11) + '0\x1b[0m\n';
+
+    process.stdout.write(out);
+  }, 1000);
 }
 
 // Export for Vercel

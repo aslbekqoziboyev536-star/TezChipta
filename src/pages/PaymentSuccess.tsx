@@ -5,10 +5,12 @@ import { CheckCircle, ArrowRight, Home, Calendar, Download, ShieldCheck } from '
 import { LoadingScreen } from '../components/LoadingScreen';
 import { Button } from '../components/ui/Button';
 import { toast } from 'sonner';
+import { useAnalytics } from '../hooks/useAnalytics';
 
 export default function PaymentSuccess() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  useAnalytics('success');
   const sessionId = searchParams.get('session_id');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

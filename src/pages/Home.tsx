@@ -16,6 +16,7 @@ import { LoadingScreen } from '../components/LoadingScreen';
 import { WeatherWidget } from '../components/WeatherWidget';
 import { Button } from '../components/ui/Button';
 import { toast } from 'sonner';
+import { useAnalytics } from '../hooks/useAnalytics';
 import { 
   Bus, 
   MapPin, 
@@ -55,6 +56,7 @@ export default function Home() {
   const { logoUrl } = useSettings();
   const { user, logout } = useAuth();
   const { t } = useLanguage();
+  const { track } = useAnalytics('home');
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [searchFrom, setSearchFrom] = useState('');
@@ -363,6 +365,7 @@ export default function Home() {
     setPendingBooking({ ride: selectedRide, seat: selectedSeat });
     setSelectedRideForSeat(null);
     setShowPassengerDetails(true);
+    track('booking');
   };
 
   const proceedToPaymentSelection = (e: React.FormEvent) => {
@@ -948,6 +951,7 @@ export default function Home() {
                     setSelectedDate(new Date().toISOString().split('T')[0]);
                   } else {
                     setIsFiltered(true);
+                    track('search');
                     const element = document.getElementById('rides');
                     if (element) element.scrollIntoView({ behavior: 'smooth' });
                   }
@@ -981,6 +985,17 @@ export default function Home() {
               <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-1 sm:mb-2">{t('home.rides.title')}</h2>
               <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">{t('home.rides.subtitle')}</p>
             </div>
+            {user?.role === 'admin' && (
+              <div>
+                <Button
+                  onClick={() => navigate('/administrator/rides')}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white w-full sm:w-auto"
+                  leftIcon={<Plus className="w-5 h-5" />}
+                >
+                  Qatnov qo'shish
+                </Button>
+              </div>
+            )}
           </div>
 
           {loading ? (
@@ -1446,28 +1461,30 @@ export default function Home() {
             </div>
 
             {/* Newsletter */}
-            <div>
-              <h3 className="text-lg font-bold mb-6">{t('home.footer.newsletter')}</h3>
-              <p className="text-gray-400 text-sm mb-6">
-                {t('home.footer.newsletter_desc') || "Chegirmalar va yangi reyslar haqida birinchilardan bo'lib xabardor bo'ling."}
-              </p>
-              <div className="relative">
-                <form onSubmit={handleNewsletter}>
-                  <input 
-                    type="email" 
-                    required
-                    placeholder="Email manzilingiz" 
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
-                  />
-                  <Button 
-                    type="submit"
-                    loading={newsletterLoading}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 p-0 rounded-lg h-auto border-0" 
-                    leftIcon={<Send className="w-4 h-4 text-white" />} 
-                  />
-                </form>
+            {user?.role !== 'admin' && (
+              <div>
+                <h3 className="text-lg font-bold mb-6">{t('home.footer.newsletter')}</h3>
+                <p className="text-gray-400 text-sm mb-6">
+                  {t('home.footer.newsletter_desc') || "Chegirmalar va yangi reyslar haqida birinchilardan bo'lib xabardor bo'ling."}
+                </p>
+                <div className="relative">
+                  <form onSubmit={handleNewsletter}>
+                    <input 
+                      type="email" 
+                      required
+                      placeholder="Email manzilingiz" 
+                      className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                    />
+                    <Button 
+                      type="submit"
+                      loading={newsletterLoading}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 p-0 rounded-lg h-auto border-0" 
+                      leftIcon={<Send className="w-4 h-4 text-white" />} 
+                    />
+                  </form>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Bottom Bar */}

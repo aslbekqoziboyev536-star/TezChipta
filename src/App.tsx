@@ -14,11 +14,12 @@ import { WifiOff, Loader2 } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { OnboardingModal } from './components/OnboardingModal';
 import { NotificationManager } from './components/NotificationManager';
+import { PushNotificationPrompt } from './components/PushNotificationPrompt';
 
 // Lazy load pages
 const Home = lazy(() => import('./pages/Home'));
 const Admin = lazy(() => import('./pages/Admin'));
-const Statistics = lazy(() => import('./pages/Statistics'));
+const Statistics = lazy(() => import('./pages/Statistics/StatisticsPage'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Blog = lazy(() => import('./pages/Blog'));
 const Login = lazy(() => import('./pages/Login'));
@@ -30,6 +31,7 @@ const Errors = lazy(() => import('./pages/Errors'));
 const Successful = lazy(() => import('./pages/Successful'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const TicketView = lazy(() => import('./pages/TicketView'));
+const SiteConsole = lazy(() => import('./pages/SiteConsole'));
 
 const PageLoader = () => (
   <div className="min-h-screen bg-gray-50 dark:bg-[#0B1120] flex items-center justify-center">
@@ -66,12 +68,14 @@ export default function App() {
               <NetworkSpeedIndicator />
               <OnboardingModal />
               <NotificationManager />
+              <PushNotificationPrompt />
               <Suspense fallback={<PageLoader />}>
                 <Routes>
                   <Route path="/" element={<Home />} />
-                  <Route path="/administrator" element={<Admin />} />
                   <Route path="/administrator/:tab" element={<Admin />} />
-                  <Route path="/statistics" element={<Statistics />} />
+                  <Route path="/admin/statistics" element={<Statistics />} />
+                  <Route path="/admin" element={<NotFound />} />
+                  <Route path="/administrator" element={<NotFound />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
                   <Route path="/profile" element={<Profile />} />
@@ -82,6 +86,7 @@ export default function App() {
                   <Route path="/errors" element={<Errors />} />
                   <Route path="/successful" element={<Successful />} />
                   <Route path="/ticket/:id" element={<TicketView />} />
+                  <Route path="/site-console" element={<SiteConsole />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>

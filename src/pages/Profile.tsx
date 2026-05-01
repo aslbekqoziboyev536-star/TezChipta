@@ -550,88 +550,90 @@ export default function Profile() {
             </div>
 
             {/* Newsletter Section */}
-            <div className="bg-white dark:bg-[#111827] rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-200 dark:border-white/5 relative overflow-hidden group">
-              <div className="absolute top-0 left-0 w-full h-1.5 bg-blue-500" />
-              <div className="flex items-center gap-3 mb-6">
-                <Mail className="w-6 h-6 text-blue-500" />
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('profile.tabs.newsletter')}</h3>
-              </div>
-
-              {checkingSubscription ? (
-                <div className="py-8 text-center">
-                  <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+            {user?.role !== 'admin' && (
+              <div className="bg-white dark:bg-[#111827] rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-200 dark:border-white/5 relative overflow-hidden group">
+                <div className="absolute top-0 left-0 w-full h-1.5 bg-blue-500" />
+                <div className="flex items-center gap-3 mb-6">
+                  <Mail className="w-6 h-6 text-blue-500" />
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('profile.tabs.newsletter')}</h3>
                 </div>
-              ) : isSubscribed ? (
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl border border-emerald-100 dark:border-emerald-500/20">
-                    <div className="flex items-center gap-3">
-                      <Check className="w-5 h-5 text-emerald-500" />
-                      <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">{t('profile.newsletter.subscribed')}</span>
+
+                {checkingSubscription ? (
+                  <div className="py-8 text-center">
+                    <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                  </div>
+                ) : isSubscribed ? (
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl border border-emerald-100 dark:border-emerald-500/20">
+                      <div className="flex items-center gap-3">
+                        <Check className="w-5 h-5 text-emerald-500" />
+                        <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">{t('profile.newsletter.subscribed')}</span>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleNewsletterUnsubscribe}
+                        className="text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 border-0 h-auto py-1"
+                      >
+                        {t('profile.newsletter.unsubscribe_btn')}
+                      </Button>
                     </div>
+
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold text-gray-700 dark:text-gray-200">{t('profile.newsletter.sound')}</span>
+                        <div className="flex items-center gap-3">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${soundEnabled ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-500'}`}>
+                            {soundEnabled ? t('common.on') : t('common.off')}
+                          </span>
+                          <button
+                            onClick={handleToggleSound}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${soundEnabled ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-gray-700'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${soundEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">{t('profile.newsletter.history')}</h4>
+                      {newsletterHistory.length > 0 ? (
+                        <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                          {newsletterHistory.map((nl) => (
+                            <div key={nl.id} className="p-4 bg-gray-50 dark:bg-[#0B1120] rounded-xl border border-gray-100 dark:border-white/5">
+                              <div className="flex justify-between items-start mb-1">
+                                <h5 className="font-bold text-sm text-gray-900 dark:text-white">{nl.subject}</h5>
+                                <span className="text-[10px] text-gray-400">{new Date(nl.sentAt).toLocaleDateString()}</span>
+                              </div>
+                              <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{nl.content}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500 text-center py-4">{t('profile.newsletter.empty')}</p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <div className="w-12 h-12 bg-blue-50 dark:bg-blue-500/10 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Mail className="w-6 h-6" />
+                    </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                        {t('home.footer.newsletter_desc')}
+                      </p>
                     <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleNewsletterUnsubscribe}
-                      className="text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 border-0 h-auto py-1"
+                      onClick={handleNewsletterSubscribe}
+                      className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-500/20"
+                      leftIcon={<Mail className="w-5 h-5" />}
                     >
-                      {t('profile.newsletter.unsubscribe_btn')}
+                      {t('profile.newsletter.subscribe_btn')}
                     </Button>
                   </div>
-
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-bold text-gray-700 dark:text-gray-200">{t('profile.newsletter.sound')}</span>
-                      <div className="flex items-center gap-3">
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${soundEnabled ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-500'}`}>
-                          {soundEnabled ? t('common.on') : t('common.off')}
-                        </span>
-                        <button
-                          onClick={handleToggleSound}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${soundEnabled ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-gray-700'}`}
-                        >
-                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${soundEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <h4 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">{t('profile.newsletter.history')}</h4>
-                    {newsletterHistory.length > 0 ? (
-                      <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                        {newsletterHistory.map((nl) => (
-                          <div key={nl.id} className="p-4 bg-gray-50 dark:bg-[#0B1120] rounded-xl border border-gray-100 dark:border-white/5">
-                            <div className="flex justify-between items-start mb-1">
-                              <h5 className="font-bold text-sm text-gray-900 dark:text-white">{nl.subject}</h5>
-                              <span className="text-[10px] text-gray-400">{new Date(nl.sentAt).toLocaleDateString()}</span>
-                            </div>
-                            <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{nl.content}</p>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-gray-500 text-center py-4">{t('profile.newsletter.empty')}</p>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-6">
-                  <div className="w-12 h-12 bg-blue-50 dark:bg-blue-500/10 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Mail className="w-6 h-6" />
-                  </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-                      {t('home.footer.newsletter_desc')}
-                    </p>
-                  <Button
-                    onClick={handleNewsletterSubscribe}
-                    className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-500/20"
-                    leftIcon={<Mail className="w-5 h-5" />}
-                  >
-                    {t('profile.newsletter.subscribe_btn')}
-                  </Button>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             {/* Notifications Section */}
             <div className="bg-white dark:bg-[#111827] rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-200 dark:border-white/5 relative overflow-hidden group">

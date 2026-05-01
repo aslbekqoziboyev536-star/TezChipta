@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { Button } from '../components/ui/Button';
-import { LayoutDashboard, Bus, Users, Settings, LogOut, Plus, Edit2, Trash2, Star, HelpCircle, Database, X, Moon, Sun, MessageCircle, Mail, Search, CloudSun, CreditCard, TrendingUp, ShieldCheck, User, Copy, Clock, Menu, Send, Bell } from 'lucide-react';
+import { LayoutDashboard, Bus, Users, Settings, LogOut, Plus, Edit2, Trash2, Star, HelpCircle, Database, X, Moon, Sun, MessageCircle, Mail, Search, CloudSun, CreditCard, TrendingUp, ShieldCheck, User, Copy, Clock, Menu, Send, Bell, Activity } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { collection, getDocs, getDoc, doc, deleteDoc, addDoc, updateDoc, setDoc, query, orderBy, onSnapshot, increment, where } from 'firebase/firestore';
@@ -14,17 +14,18 @@ import { WeatherWidget } from '../components/WeatherWidget';
 import { SafeImage } from '../components/SafeImage';
 import { toast } from 'sonner';
 import { useLanguage } from '../context/LanguageContext';
+import { AdminAnalytics } from '../components/AdminAnalytics';
 
 export default function Admin() {
   const { user, loading: authLoading, logout } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
   const { tab } = useParams<{ tab: string }>();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'rides' | 'drivers' | 'faqs' | 'users' | 'messages' | 'chats' | 'settings' | 'reviews' | 'payments' | 'newsletter' | 'notifications'>((tab as any) || 'dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'analytics' | 'orders' | 'rides' | 'drivers' | 'faqs' | 'users' | 'messages' | 'chats' | 'settings' | 'reviews' | 'payments' | 'newsletter' | 'notifications'>((tab as any) || 'dashboard');
 
   useEffect(() => {
     if (tab) {
-      const validTabs = ['dashboard', 'rides', 'drivers', 'faqs', 'users', 'messages', 'chats', 'settings', 'reviews', 'payments', 'newsletter', 'notifications'];
+      const validTabs = ['dashboard', 'analytics', 'orders', 'rides', 'drivers', 'faqs', 'users', 'messages', 'chats', 'settings', 'reviews', 'payments', 'newsletter', 'notifications'];
       if (validTabs.includes(tab)) {
         setActiveTab(tab as any);
       } else {
@@ -40,6 +41,9 @@ export default function Admin() {
     setIsSidebarOpen(false);
   };
   const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [orderSearchQuery, setOrderSearchQuery] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState('all');
+  const [paymentTabMode, setPaymentTabMode] = useState<'pending' | 'history'>('pending');
   const [rides, setRides] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
   const [faqs, setFaqs] = useState<any[]>([]);
@@ -66,6 +70,8 @@ export default function Admin() {
   const [clickServiceId, setClickServiceId] = useState('');
   const [clickMerchantId, setClickMerchantId] = useState('');
   const [clickSecretKey, setClickSecretKey] = useState('');
+  const [basePrice, setBasePrice] = useState(0);
+  const [emailTemplate, setEmailTemplate] = useState('');
   const [siteDescription, setSiteDescription] = useState("TezChipta - O'zbekiston bo'ylab avtobus qatnovlari uchun chiptalarni onlayn sotib olish tizimi. Bizning platformamiz orqali siz uyingizdan chiqmasdan turib, o'zingizga qulay vaqt va yo'nalishni tanlashingiz, chiptalarni Stripe yoki karta orqali to'lov qilib xarid qilishingiz mumkin. Xavfsiz va qulay sayohat TezChipta bilan boshlanadi!");
   const [updatingSettings, setUpdatingSettings] = useState(false);
   const [paymentActionLoading, setPaymentActionLoading] = useState<string | null>(null);
@@ -235,6 +241,8 @@ export default function Admin() {
         setManualEnabled(paymentSettings.manualEnabled !== false);
         setPaymeEnabled(paymentSettings.paymeEnabled !== false);
         setClickEnabled(paymentSettings.clickEnabled !== false);
+        setBasePrice(paymentSettings.basePrice || 0);
+        setEmailTemplate(paymentSettings.emailTemplate || '');
         
         // Fetch sensitive keys from a separate document
         const keysDoc = await getDoc(doc(db, "settings", "merchant_keys"));
@@ -669,6 +677,22 @@ export default function Admin() {
     }
   };
 
+  const handleToggleBlockUser = async (userId: string, currentBlockedStatus: boolean) => {
+    try {
+      try {
+        await updateDoc(doc(db, 'users', userId), { isBlocked: !currentBlockedStatus });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
+        return;
+      }
+      setUsersList(usersList.map(u => u.id === userId ? { ...u, isBlocked: !currentBlockedStatus } : u));
+      toast.success(currentBlockedStatus ? "Foydalanuvchi blokdan chiqarildi" : "Foydalanuvchi bloklandi");
+    } catch (error) {
+      console.error("Error toggling block status:", error);
+      toast.error("Xatolik yuz berdi");
+    }
+  };
+
   const handleMarkMessageRead = async (messageId: string) => {
     setMessageLoading(messageId);
     try {
@@ -746,6 +770,8 @@ export default function Admin() {
           paymeEnabled,
           clickEnabled,
           siteDescription,
+          basePrice,
+          emailTemplate,
           updatedAt: new Date().toISOString()
         }, { merge: true });
 
@@ -1093,6 +1119,26 @@ export default function Admin() {
           </Button>
           <Button
             variant="secondary"
+            onClick={() => handleTabChange('analytics')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${
+              activeTab === 'analytics' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+            }`}
+            leftIcon={<Activity className="w-5 h-5" />}
+          >
+            Analitika
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => handleTabChange('orders')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${
+              activeTab === 'orders' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+            }`}
+            leftIcon={<Database className="w-5 h-5" />}
+          >
+            {t('admin.orders') || 'Buyurtmalar'}
+          </Button>
+          <Button
+            variant="secondary"
             onClick={() => handleTabChange('rides')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-0 justify-start h-auto ${
               activeTab === 'rides' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
@@ -1286,20 +1332,22 @@ export default function Admin() {
         <header className="hidden md:flex bg-white dark:bg-[#111827] border-b border-gray-200 dark:border-white/5 p-4 sm:p-6 items-center justify-between sticky top-0 z-20">
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white capitalize">
             {activeTab === 'dashboard' ? 'Dashboard' : 
+             activeTab === 'orders' ? 'Buyurtmalar' :
              activeTab === 'rides' ? 'Qatnovlar' :
              activeTab === 'drivers' ? 'Haydovchilar' :
              activeTab === 'faqs' ? 'FAQlar' :
              activeTab === 'users' ? 'Foydalanuvchilar' :
              activeTab === 'messages' ? 'Xabarlar' :
              activeTab === 'chats' ? 'Chatlar' :
-             activeTab === 'reviews' ? 'Fikrlar' : 'Sozlamalar'}
+             activeTab === 'reviews' ? 'Fikrlar' :
+             activeTab === 'payments' ? 'To\'lovlar' : 'Sozlamalar'}
           </h2>
           {user?.role === 'admin' && (
             <div className="flex items-center gap-2 sm:gap-4">
               <ThemeToggle />
               <Button
                 variant="secondary"
-                onClick={() => navigate('/statistics')}
+                onClick={() => navigate('/admin/statistics')}
                 className="bg-emerald-500 hover:bg-emerald-600 text-white border-0 flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl font-bold shadow-lg shadow-emerald-500/20 h-auto text-sm sm:text-base"
                 leftIcon={<TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />}
               >
@@ -1399,6 +1447,160 @@ export default function Admin() {
                     <div className="text-[10px] sm:text-sm text-gray-500 dark:text-gray-400 font-medium">Mening yo'lovchilarim</div>
                   </div>
                 )}
+              </div>
+
+              {/* Advanced Statistics Grid */}
+              {(user?.role as string) === 'admin' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="bg-white dark:bg-[#111827] p-6 rounded-2xl shadow-sm border border-emerald-100 dark:border-emerald-500/10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center">
+                        <TrendingUp className="w-6 h-6" />
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-500 uppercase">Jami savdo</span>
+                    </div>
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {formatPrice(bookings.filter(b => b.status === 'confirmed').reduce((acc, b) => acc + b.price, 0))}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">Muvaffaqiyatli to'lovlar asosida</p>
+                  </div>
+
+                  <div className="bg-white dark:bg-[#111827] p-6 rounded-2xl shadow-sm border border-blue-100 dark:border-blue-500/10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="w-10 h-10 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center">
+                        <Users className="w-6 h-6" />
+                      </div>
+                      <span className="text-[10px] font-bold text-blue-500 uppercase">Yangi a'zolar</span>
+                    </div>
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {usersList.filter(u => new Date(u.createdAt).toDateString() === new Date().toDateString()).length}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">Bugun qo'shilganlar</p>
+                  </div>
+
+                  <div className="bg-white dark:bg-[#111827] p-6 rounded-2xl shadow-sm border border-amber-100 dark:border-amber-500/10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="w-10 h-10 bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center">
+                        <Bus className="w-6 h-6" />
+                      </div>
+                      <span className="text-[10px] font-bold text-amber-500 uppercase">Faol qatnovlar</span>
+                    </div>
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {rides.filter(r => r.status === 'active').length}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">Hozirda sotuvdagi qatnovlar</p>
+                  </div>
+
+                  <div className="bg-white dark:bg-[#111827] p-6 rounded-2xl shadow-sm border border-purple-100 dark:border-purple-500/10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="w-10 h-10 bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 rounded-xl flex items-center justify-center">
+                        <MessageCircle className="w-6 h-6" />
+                      </div>
+                      <span className="text-[10px] font-bold text-purple-500 uppercase">Yangi xabarlar</span>
+                    </div>
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {messages.filter(m => m.status === 'unread').length}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">O'qilmagan so'rovlar</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {activeTab === 'analytics' && <AdminAnalytics />}
+          {activeTab === 'orders' && (
+            <div className="space-y-6">
+              {/* Filters */}
+              <div className="bg-white dark:bg-[#111827] p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 flex flex-col sm:flex-row gap-4 justify-between items-center">
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Chipta ID yoki foydalanuvchi..."
+                    value={orderSearchQuery}
+                    onChange={(e) => setOrderSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-200 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <span className="text-xs font-bold text-gray-500 uppercase">Status:</span>
+                  <select
+                    value={orderStatusFilter}
+                    onChange={(e) => setOrderStatusFilter(e.target.value)}
+                    className="px-3 py-2 bg-gray-50 dark:bg-[#0B1120] border border-gray-200 dark:border-white/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="all">Barchasi</option>
+                    <option value="confirmed">To'langan</option>
+                    <option value="pending">Kutilmoqda</option>
+                    <option value="cancelled">Bekor qilingan</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-[#111827] rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-white/5 border-b border-gray-100 dark:border-white/5">
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Chipta ID</th>
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Yo'lovchi</th>
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Yo'nalish</th>
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Sana / Vaqt</th>
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Status</th>
+                        <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Narx</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                      {bookings
+                        .filter(b => {
+                          const passenger = usersList.find(u => u.id === b.userId);
+                          const ride = rides.find(r => r.id === b.rideId);
+                          const matchesSearch = 
+                            b.id.toLowerCase().includes(orderSearchQuery.toLowerCase()) ||
+                            (passenger?.name || '').toLowerCase().includes(orderSearchQuery.toLowerCase()) ||
+                            (ride?.from || '').toLowerCase().includes(orderSearchQuery.toLowerCase()) ||
+                            (ride?.to || '').toLowerCase().includes(orderSearchQuery.toLowerCase());
+                          const matchesStatus = orderStatusFilter === 'all' || b.status === orderStatusFilter;
+                          return matchesSearch && matchesStatus;
+                        })
+                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                        .map(booking => {
+                          const passenger = usersList.find(u => u.id === booking.userId);
+                          const ride = rides.find(r => r.id === booking.rideId);
+                          return (
+                            <tr key={booking.id} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                              <td className="p-4 font-mono text-xs text-emerald-600 dark:text-emerald-400">
+                                #{booking.id.slice(0, 8).toUpperCase()}
+                              </td>
+                              <td className="p-4">
+                                <div className="text-sm font-medium text-gray-900 dark:text-white">{passenger?.name || 'Noma\'lum'}</div>
+                                <div className="text-[10px] text-gray-500">{passenger?.phone || passenger?.email || '-'}</div>
+                              </td>
+                              <td className="p-4 text-sm text-gray-600 dark:text-gray-400">
+                                {ride?.from} → {ride?.to}
+                              </td>
+                              <td className="p-4">
+                                <div className="text-xs text-gray-600 dark:text-gray-400">{ride?.date}</div>
+                                <div className="text-[10px] text-gray-500">{ride?.departureTime}</div>
+                              </td>
+                              <td className="p-4">
+                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                  booking.status === 'confirmed' ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' :
+                                  booking.status === 'pending' ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400' :
+                                  'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400'
+                                }`}>
+                                  {booking.status === 'confirmed' ? 'To\'langan' : booking.status === 'pending' ? 'Kutilmoqda' : 'Bekor qilingan'}
+                                </span>
+                              </td>
+                              <td className="p-4 text-sm font-bold text-gray-900 dark:text-white">
+                                {formatPrice(booking.price)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -1989,6 +2191,14 @@ export default function Admin() {
                             </select>
                           </td>
                           <td className="p-4 text-sm flex items-center gap-2">
+                            <Button 
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleToggleBlockUser(u.id, !!u.isBlocked)}
+                              className={`p-2 rounded-lg transition-colors ${u.isBlocked ? 'text-red-500 bg-red-50 dark:bg-red-500/10' : 'text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10'}`}
+                              leftIcon={<ShieldCheck className={`w-4 h-4 ${u.isBlocked ? 'fill-current' : ''}`} />}
+                              title={u.isBlocked ? "Blokdan chiqarish" : "Bloklash"}
+                            />
                             <Button 
                               variant="secondary"
                               size="sm"
@@ -2596,6 +2806,35 @@ export default function Admin() {
                     </div>
                   </div>
 
+                  <div className="bg-gray-50 dark:bg-[#0B1120]/50 p-6 rounded-xl border border-gray-100 dark:border-white/5 space-y-4">
+                    <div className="flex items-center gap-3 mb-2">
+                      <Database className="w-5 h-5 text-emerald-500" />
+                      <h4 className="font-bold text-gray-900 dark:text-white">Narxlar va Tizim</h4>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Boshlang'ich narx (so'm)</label>
+                        <input
+                          type="number"
+                          value={basePrice}
+                          onChange={(e) => setBasePrice(Number(e.target.value))}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Email/Xabar Shabloni</label>
+                      <textarea
+                        value={emailTemplate}
+                        onChange={(e) => setEmailTemplate(e.target.value)}
+                        rows={6}
+                        placeholder="Hurmatli {{name}}, sizning chiptangiz muvaffaqiyatli band qilindi..."
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1120] text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all resize-none font-mono text-sm"
+                      />
+                      <p className="text-[10px] text-gray-500">O'zgaruvchilar: {'{{name}}, {{ticket_id}}, {{price}}'}</p>
+                    </div>
+                  </div>
+
                   <Button
                     onClick={handleUpdateSettings}
                     loading={updatingSettings}
@@ -2626,13 +2865,28 @@ export default function Admin() {
           )}
           {activeTab === 'payments' && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">To'lovlarni tasdiqlash</h2>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">To'lovlar</h2>
+                <div className="flex bg-gray-100 dark:bg-[#0B1120] p-1 rounded-xl">
+                  <button
+                    onClick={() => setPaymentTabMode('pending')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${paymentTabMode === 'pending' ? 'bg-white dark:bg-[#111827] text-emerald-500 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                  >
+                    Tasdiqlash kutilmoqda ({bookings.filter(b => b.paymentMethod === 'manual' && b.paymentStatus === 'pending_review').length})
+                  </button>
+                  <button
+                    onClick={() => setPaymentTabMode('history')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${paymentTabMode === 'history' ? 'bg-white dark:bg-[#111827] text-emerald-500 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                  >
+                    Tarix
+                  </button>
+                </div>
               </div>
 
-              <div className="grid gap-4">
-                {bookings.filter(b => b.paymentMethod === 'manual' && b.paymentStatus === 'pending_review').length > 0 ? (
-                  bookings.filter(b => b.paymentMethod === 'manual' && b.paymentStatus === 'pending_review').map((booking) => {
+              {paymentTabMode === 'pending' ? (
+                <div className="grid gap-4">
+                  {bookings.filter(b => b.paymentMethod === 'manual' && b.paymentStatus === 'pending_review').length > 0 ? (
+                    bookings.filter(b => b.paymentMethod === 'manual' && b.paymentStatus === 'pending_review').map((booking) => {
                     const passenger = usersList.find(u => u.id === booking.userId);
                     const ride = rides.find(r => r.id === booking.rideId);
                     return (
@@ -2692,15 +2946,68 @@ export default function Admin() {
                     );
                   })
                 ) : (
-                  <div className="bg-white dark:bg-[#111827] p-12 rounded-2xl border border-dashed border-gray-200 dark:border-white/10 text-center">
-                    <div className="w-16 h-16 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <CreditCard className="w-8 h-8 text-gray-400" />
+                    <div className="bg-white dark:bg-[#111827] p-12 rounded-2xl border border-dashed border-gray-200 dark:border-white/10 text-center">
+                      <div className="w-16 h-16 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <CreditCard className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white">Tasdiqlanishi kutilayotgan to'lovlar yo'q</h3>
+                      <p className="text-gray-500">Hozircha barcha manual to'lovlar ko'rib chiqilgan.</p>
                     </div>
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Tasdiqlanishi kutilayotgan to'lovlar yo'q</h3>
-                    <p className="text-gray-500">Hozircha barcha manual to'lovlar ko'rib chiqilgan.</p>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-white dark:bg-[#111827] rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50 dark:bg-white/5 border-b border-gray-100 dark:border-white/5">
+                          <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Sana</th>
+                          <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Foydalanuvchi</th>
+                          <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Usul</th>
+                          <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Summa</th>
+                          <th className="p-4 font-semibold text-gray-600 dark:text-gray-400 text-sm">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                        {bookings
+                          .filter(b => b.paymentStatus && b.paymentStatus !== 'pending_review')
+                          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                          .map(booking => {
+                            const passenger = usersList.find(u => u.id === booking.userId);
+                            return (
+                              <tr key={booking.id} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                                <td className="p-4 text-xs text-gray-500">
+                                  {new Date(booking.createdAt).toLocaleString()}
+                                </td>
+                                <td className="p-4">
+                                  <div className="text-sm font-medium text-gray-900 dark:text-white">{passenger?.name || 'Noma\'lum'}</div>
+                                  <div className="text-[10px] text-gray-500">{booking.id.slice(0, 8).toUpperCase()}</div>
+                                </td>
+                                <td className="p-4">
+                                  <span className="text-xs font-bold uppercase text-gray-600 dark:text-gray-400">
+                                    {booking.paymentMethod}
+                                  </span>
+                                </td>
+                                <td className="p-4 text-sm font-bold text-emerald-500">
+                                  {formatPrice(booking.price)}
+                                </td>
+                                <td className="p-4">
+                                  <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                    booking.paymentStatus === 'paid' ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' :
+                                    booking.paymentStatus === 'cancelled' ? 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400' :
+                                    'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
+                                  }`}>
+                                    {booking.paymentStatus === 'paid' ? 'Muvaffaqiyatli' : booking.paymentStatus === 'cancelled' ? 'Bekor qilingan' : booking.paymentStatus}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
 

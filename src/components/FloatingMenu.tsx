@@ -36,7 +36,7 @@ export const FloatingMenu = () => {
     { icon: <Newspaper className="w-5 h-5" />, label: t('menu.blog'), path: '/blog' },
     { icon: <User className="w-5 h-5" />, label: t('menu.profile'), path: '/profile', auth: true },
     { icon: <ShieldCheck className="w-5 h-5" />, label: t('menu.admin'), path: '/administrator/dashboard', admin: true },
-    { icon: <TrendingUp className="w-5 h-5" />, label: t('menu.stats'), path: '/statistics', adminOnly: true },
+    { icon: <TrendingUp className="w-5 h-5" />, label: t('menu.stats'), path: '/admin/statistics', adminOnly: true },
     { icon: <HelpCircle className="w-5 h-5" />, label: t('menu.help'), path: '/#help' },
   ];
 

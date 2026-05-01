@@ -77,7 +77,7 @@ export default function NotFound() {
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Eng so'nggi yangiliklar va maqolalar.</p>
             </Link>
             
-            <Link to="/statistics" className="p-6 bg-gray-50 dark:bg-white/5 rounded-3xl border border-gray-100 dark:border-white/5 hover:border-emerald-500/30 transition-all group">
+            <Link to="/admin/statistics" className="p-6 bg-gray-50 dark:bg-white/5 rounded-3xl border border-gray-100 dark:border-white/5 hover:border-emerald-500/30 transition-all group">
               <HelpCircle className="w-6 h-6 text-blue-500 mb-3" />
               <h3 className="font-bold text-gray-900 dark:text-white group-hover:text-blue-500 transition-colors">Statistika</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Xizmatimiz haqida qiziqarli ko'rsatkichlar.</p>
