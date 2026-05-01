@@ -32,7 +32,7 @@ export const AdminAnalytics: React.FC = () => {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    const socketUrl = import.meta.env.DEV ? 'http://localhost:5174' : '/';
+    const socketUrl = window.location.origin;
     socketRef.current = io(socketUrl);
 
     socketRef.current.on('admin_metrics_update', (data: Metrics) => {

@@ -204,7 +204,7 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
 };
 
 const app = express();
-const PORT = process.env.PORT || 5174;
+const PORT = process.env.PORT || 4321;
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
@@ -221,13 +221,13 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const duration = Date.now() - start;
     const path = req.path;
-    
+
     // Update metrics
     serverMetrics.responseTimes.push(duration);
     if (serverMetrics.responseTimes.length > 100) serverMetrics.responseTimes.shift();
-    
+
     serverMetrics.avgResponseTime = serverMetrics.responseTimes.reduce((a, b) => a + b, 0) / Math.max(1, serverMetrics.responseTimes.length);
-    
+
     if (!serverMetrics.endpointStats[path]) {
       serverMetrics.endpointStats[path] = { count: 0, totalTime: 0 };
     }
@@ -248,22 +248,38 @@ app.use((req, res, next) => {
 });
 
 // 1. High Security Headers (Helmet)
+// 1. High Security Headers (Helmet)
 app.use(helmet({
-  contentSecurityPolicy: {
+  contentSecurityPolicy: isProduction ? {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://apis.google.com", "https://*.stripe.com", "https://www.gstatic.com"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      imgSrc: ["'self'", "data:", "https:", "http:", "blob:", "https://*.googleusercontent.com", "https://*.gstatic.com", "https://*.stripe.com", "https://www.gstatic.com", "https://picsum.photos", "https://imagehosting-hulf.onrender.com", "https://placehold.co", "https://cdn-icons-png.flaticon.com"],
-      connectSrc: ["'self'", "https://*.supabase.co", "https://*.supabase.in", "https://*.googleapis.com", "https://*.firebaseio.com", "https://*.stripe.com", "wss://*.run.app", "ws://localhost:*", "wss://*.supabase.co", "https://api.stripe.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://apis.google.com", "https://*.stripe.com", "https://www.gstatic.com", "https://*.firebaseapp.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://www.gstatic.com"],
+      imgSrc: ["'self'", "data:", "https:", "http:", "blob:", "https://*.googleusercontent.com", "https://*.gstatic.com", "https://*.stripe.com", "https://www.gstatic.com", "https://picsum.photos", "https://imagehosting-hulf.onrender.com", "https://placehold.co", "https://cdn-icons-png.flaticon.com", "https://*.firebaseapp.com"],
+      connectSrc: [
+        "'self'", 
+        "https://*.supabase.co", 
+        "https://*.supabase.in", 
+        "https://*.googleapis.com", 
+        "https://*.firebaseio.com", 
+        "https://*.stripe.com", 
+        "https://*.firebaseapp.com",
+        "https://api.open-meteo.com",
+        "wss://*.firebaseio.com",
+        "wss://*.run.app", 
+        "wss://*.supabase.co", 
+        "https://api.stripe.com",
+        "https://identitytoolkit.googleapis.com",
+        "https://securetoken.googleapis.com"
+      ],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
       frameSrc: ["'self'", "https://*.stripe.com", "https://*.google.com", "https://*.firebaseapp.com", "https://hooks.stripe.com"],
     },
-  },
+  } : false,
   crossOriginEmbedderPolicy: false,
-  crossOriginOpenerPolicy: false,
+  crossOriginOpenerPolicy: { policy: "unsafe-none" },
   crossOriginResourcePolicy: { policy: "cross-origin" },
   referrerPolicy: { policy: "no-referrer-when-downgrade" },
 }));
@@ -274,8 +290,6 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
-  res.setHeader('Cross-Origin-Opener-Policy', 'unsafe-none');
-  res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
   next();
 });
 
@@ -316,7 +330,7 @@ async function startServer() {
       if (!payload) return res.status(400).json({ error: "Invalid token payload" });
       const token = jwt.sign({ id: payload.sub, email: payload.email, name: payload.name, picture: payload.picture }, JWT_SECRET, { expiresIn: "7d" });
       res.cookie("auth_token", token, { httpOnly: true, secure: true, sameSite: "none", maxAge: 7 * 24 * 60 * 60 * 1000 });
-      res.json({ success: true, user: { id: payload.sub, email: payload.email, name: payload.name, picture: payload.picture }});
+      res.json({ success: true, user: { id: payload.sub, email: payload.email, name: payload.name, picture: payload.picture } });
     } catch (error: any) {
       console.error("Token verification error:", error.message);
       res.status(401).json({ error: "Authentication failed" });
@@ -423,34 +437,34 @@ async function startServer() {
       if (!firebaseConfig.apiKey) throw new Error("Firebase API Key not found");
       const signUpResponse = await axios.post(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${firebaseConfig.apiKey}`, { email, password, returnSecureToken: true });
       const uid = signUpResponse.data.localId;
-      
+
       if (!db) throw new Error("Firestore Admin not initialized");
-      
+
       const batch = db.batch();
       const userRef = db.collection('users').doc(uid);
       const driverRef = db.collection('drivers').doc();
-      
-      batch.set(userRef, { 
-        name, 
-        email, 
-        role: 'driver', 
-        createdAt: new Date().toISOString() 
+
+      batch.set(userRef, {
+        name,
+        email,
+        role: 'driver',
+        createdAt: new Date().toISOString()
       });
-      
-      batch.set(driverRef, { 
-        uid, 
-        name, 
-        email, 
-        phone: phone || '', 
-        photo: photo || '', 
-        bio: bio || '', 
-        experience: experience || 0, 
-        rating: rating || 5.0, 
-        createdAt: new Date().toISOString() 
+
+      batch.set(driverRef, {
+        uid,
+        name,
+        email,
+        phone: phone || '',
+        photo: photo || '',
+        bio: bio || '',
+        experience: experience || 0,
+        rating: rating || 5.0,
+        createdAt: new Date().toISOString()
       });
-      
+
       await batch.commit();
-      
+
       res.json({ success: true, driverId: driverRef.id, uid });
     } catch (error: any) {
       const errorMsg = error.response?.data?.error?.message || error.message;
@@ -462,18 +476,18 @@ async function startServer() {
   app.post("/api/admin/ai-analysis", verifyAdmin, async (req, res) => {
     try {
       const { usersCount, bookingsCount, ridesCount, language } = req.body;
-      
+
       const dateStr = new Date().toISOString().split('T')[0];
       const cacheId = `${dateStr}_${language}`;
-      
+
       if (!db) throw new Error("Firestore not initialized");
       const cacheRef = db.collection('stats_ai_cache').doc(cacheId);
       const cacheDoc = await cacheRef.get();
-      
+
       if (cacheDoc.exists) {
         return res.json({ analysis: cacheDoc.data()?.result });
       }
-      
+
       const statsSummary = `
         Platform Statistics:
         - Total Users: ${usersCount}
@@ -494,7 +508,7 @@ async function startServer() {
         model: "gemini-2.0-flash",
         contents: statsSummary,
       });
-      
+
       await cacheRef.set({
         result: response.text,
         timestamp: new Date().toISOString(),
@@ -684,7 +698,7 @@ async function startServer() {
       serverMetrics.onlineUsers = Math.max(0, serverMetrics.onlineUsers - 1);
       io.emit('admin_metrics_update', serverMetrics);
     });
-    
+
     // Analytics tracking from client
     socket.on("track_event", (event: keyof typeof serverMetrics.conversions) => {
       if (serverMetrics.conversions[event] !== undefined) {
@@ -712,46 +726,9 @@ async function startServer() {
 
   httpServer.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
-    startSpeedMonitor();
   });
 }
 
-// --- Server Speed Monitor ---
-const speedHistory: number[] = Array(60).fill(0);
-function startSpeedMonitor() {
-  setInterval(() => {
-    let speed = Math.floor(Math.random() * 5);
-    if (Math.random() > 0.8) speed += Math.floor(Math.random() * 60);
-    speed = Math.min(speed, 100);
-
-    speedHistory.shift();
-    speedHistory.push(speed);
-
-    // Emit to Socket.IO for the web console
-    io.emit('server_speed_update', { speed, history: speedHistory });
-
-    const height = 10;
-    const width = 60;
-    
-    console.clear();
-    let out = '\x1b[36mspeed of server: ' + speed + '%\x1b[0m\n\n';
-
-    for (let y = height; y > 0; y--) {
-      let row = '\x1b[90m|\x1b[0m ';
-      for (let x = 0; x < width; x++) {
-        const val = (speedHistory[x] / 100) * height;
-        if (val >= y) row += '\x1b[32m█\x1b[0m';
-        else if (val >= y - 0.5) row += '\x1b[32m▄\x1b[0m';
-        else row += ' ';
-      }
-      out += row + '\n';
-    }
-    out += '\x1b[90m+' + '-'.repeat(width) + '\x1b[0m\n';
-    out += '\x1b[90m60 seconds' + ' '.repeat(width - 11) + '0\x1b[0m\n';
-
-    process.stdout.write(out);
-  }, 1000);
-}
 
 // Export for Vercel
 export default app;

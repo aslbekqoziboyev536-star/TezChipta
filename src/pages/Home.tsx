@@ -104,10 +104,10 @@ export default function Home() {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [rideBookings, setRideBookings] = useState<any[]>([]);
   const [stats, setStats] = useState({
-    todaySales: 120,
-    satisfaction: 95,
-    experience: 10,
-    driversCount: 50
+    todaySales: 0,
+    satisfaction: 0,
+    experience: 0,
+    driversCount: 0
   });
 
   // Data state
@@ -131,7 +131,7 @@ export default function Home() {
 
   const [faqsList, setFaqsList] = useState<any[]>([
     {
-      question: t('Birinchi savol'),
+      question: t('home.faq.q1'),
       answer: t('home.faq.a1')
     },
     {
@@ -214,10 +214,10 @@ export default function Home() {
         const satisfactionRate = Math.round((avgRating / 5) * 100);
 
         setStats({
-          todaySales: todayBookingsSnapshot.size || 120, // Fallback to 120 if 0 for demo feel, or just use real
-          satisfaction: satisfactionRate || 95,
-          experience: 10, // Hardcoded as brand age
-          driversCount: driversData.length || 50
+          todaySales: todayBookingsSnapshot.size,
+          satisfaction: satisfactionRate || 100,
+          experience: 1, // Start with 1 year
+          driversCount: driversData.length
         });
 
         const paymentSettings = settingsSnapshot.docs.find(d => d.id === 'payment')?.data();
@@ -392,7 +392,7 @@ export default function Home() {
     try {
       const ticketUrl = generateTicketUrl();
       const bookingData = {
-        userId: user.id,
+        userId: auth.currentUser?.uid || user.id,
         rideId: pendingBooking.ride.id,
         seatNumber: pendingBooking.seat,
         status: 'pending',
@@ -444,7 +444,7 @@ export default function Home() {
     try {
       const ticketUrl = generateTicketUrl();
       const bookingData = {
-        userId: user.id,
+        userId: auth.currentUser?.uid || user.id,
         rideId: pendingBooking.ride.id,
         seatNumber: pendingBooking.seat,
         status: 'pending',
@@ -598,7 +598,7 @@ export default function Home() {
         comment: reviewForm.comment,
         status: 'pending',
         createdAt: new Date().toISOString(),
-        userId: user.id
+        userId: auth.currentUser?.uid || user.id
       });
       setShowReviewModal(false);
       setReviewForm({ rating: 5, comment: '' });
@@ -636,7 +636,7 @@ export default function Home() {
       const subscriberData = {
         email,
         emailLower,
-        userId: user?.id || null,
+        userId: auth.currentUser?.uid || user?.id || null,
         createdAt: new Date().toISOString(),
         source: 'home_footer'
       };
