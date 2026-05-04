@@ -62,7 +62,7 @@ export default function Admin() {
   const [adminCardOwner, setAdminCardOwner] = useState('');
   const [adminSupportPhone, setAdminSupportPhone] = useState('');
   const [stripeEnabled, setStripeEnabled] = useState(true);
-  const [manualEnabled, setManualEnabled] = useState(true);
+  const [manualEnabled, setManualEnabled] = useState(false);
   const [paymeEnabled, setPaymeEnabled] = useState(true);
   const [clickEnabled, setClickEnabled] = useState(true);
   const [paymeMerchantId, setPaymeMerchantId] = useState('');
@@ -238,7 +238,7 @@ export default function Admin() {
         setAdminCardOwner(paymentSettings.adminCardOwner || '');
         setAdminSupportPhone(paymentSettings.adminSupportPhone || '');
         setStripeEnabled(paymentSettings.stripeEnabled !== false);
-        setManualEnabled(paymentSettings.manualEnabled !== false);
+        setManualEnabled(false);
         setPaymeEnabled(paymentSettings.paymeEnabled !== false);
         setClickEnabled(paymentSettings.clickEnabled !== false);
         setBasePrice(paymentSettings.basePrice || 0);
@@ -2792,18 +2792,6 @@ export default function Admin() {
                       )}
                     </div>
 
-                    <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#0B1120]/50 border border-gray-100 dark:border-white/5">
-                      <div>
-                        <div className="font-bold text-gray-900 dark:text-white">Karta orqali (Manual)</div>
-                        <div className="text-xs text-gray-500">O'tkazma qilib chek yuborish orqali to'lash</div>
-                      </div>
-                      <button
-                        onClick={() => setManualEnabled(!manualEnabled)}
-                        className={`w-12 h-6 rounded-full transition-colors relative ${manualEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}
-                      >
-                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${manualEnabled ? 'right-1' : 'left-1'}`} />
-                      </button>
-                    </div>
                   </div>
 
                   <div className="bg-gray-50 dark:bg-[#0B1120]/50 p-6 rounded-xl border border-gray-100 dark:border-white/5 space-y-4">
@@ -2885,66 +2873,13 @@ export default function Admin() {
 
               {paymentTabMode === 'pending' ? (
                 <div className="grid gap-4">
-                  {bookings.filter(b => b.paymentMethod === 'manual' && b.paymentStatus === 'pending_review').length > 0 ? (
-                    bookings.filter(b => b.paymentMethod === 'manual' && b.paymentStatus === 'pending_review').map((booking) => {
-                    const passenger = usersList.find(u => u.id === booking.userId);
-                    const ride = rides.find(r => r.id === booking.rideId);
-                    return (
-                      <div key={booking.id} className="bg-white dark:bg-[#111827] p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center font-bold text-xl">
-                            {passenger?.name?.[0].toUpperCase() || 'U'}
-                          </div>
-                          <div>
-                            <h4 className="font-bold text-gray-900 dark:text-white">{passenger?.name || 'Noma\'lum'}</h4>
-                            <p className="text-sm text-gray-500">{passenger?.phone || passenger?.email}</p>
-                            <div className="mt-1 text-xs text-gray-400">
-                              {ride?.from} → {ride?.to} | {ride?.departureTime} | {booking.seatNumber}-o'rindiq
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex-1 flex justify-center">
-                          <a 
-                            href={booking.receiptUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="group relative block w-32 h-20 rounded-lg overflow-hidden border border-gray-200 dark:border-white/10 hover:border-emerald-500 transition-all"
-                          >
-                            <img src={booking.receiptUrl} alt="Receipt" className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-                              <Search className="w-5 h-5 text-white" />
-                            </div>
-                          </a>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <div className="text-right mr-4">
-                            <div className="text-lg font-bold text-emerald-500">{formatPrice(booking.price)}</div>
-                            <div className="flex items-center gap-1 justify-end text-[10px] text-amber-500 uppercase font-bold">
-                              <Clock className="w-3 h-3" />
-                              Kutilmoqda
-                            </div>
-                          </div>
-                          <Button
-                            variant="secondary"
-                            onClick={() => handleConfirmManualPayment(booking.id, 'cancelled')}
-                            loading={paymentActionLoading === booking.id}
-                            className="px-4 py-2 text-red-500 hover:bg-red-500/10 border-red-500/20 h-auto"
-                          >
-                            Rad etish
-                          </Button>
-                          <Button
-                            onClick={() => handleConfirmManualPayment(booking.id, 'paid')}
-                            loading={paymentActionLoading === booking.id}
-                            className="px-4 py-2 bg-emerald-500 text-white h-auto"
-                          >
-                            Tasdiqlash
-                          </Button>
-                        </div>
+                    <div className="bg-white dark:bg-[#111827] p-12 rounded-2xl border border-dashed border-gray-200 dark:border-white/10 text-center">
+                      <div className="w-16 h-16 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <CreditCard className="w-8 h-8 text-gray-400" />
                       </div>
-                    );
-                  })
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white">Manual to'lovlar o'chirilgan</h3>
+                      <p className="text-gray-500">Manual to'lov va chek yuklash funksiyasi tizimdan olib tashlandi.</p>
+                    </div>
                 ) : (
                     <div className="bg-white dark:bg-[#111827] p-12 rounded-2xl border border-dashed border-gray-200 dark:border-white/10 text-center">
                       <div className="w-16 h-16 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">

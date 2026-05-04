@@ -243,7 +243,7 @@ export default function Home() {
           setAdminCardOwner(paymentSettings.adminCardOwner || '');
           setAdminSupportPhone(paymentSettings.adminSupportPhone || '');
           setStripeEnabled(paymentSettings.stripeEnabled !== false);
-          setManualEnabled(paymentSettings.manualEnabled !== false);
+          setManualEnabled(false); // Force disabled
           setPaymeEnabled(paymentSettings.paymeEnabled !== false);
           setClickEnabled(paymentSettings.clickEnabled !== false);
         }
@@ -502,69 +502,6 @@ export default function Home() {
     }
   };
 
-  const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setReceiptRawFile(file);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setReceiptFile(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const submitReceipt = async () => {
-    if (!currentBookingId || !receiptRawFile) return;
-
-    setUploadingReceipt(true);
-    try {
-      // 1. Upload to Supabase Storage
-      const fileExt = receiptRawFile.name.split('.').pop();
-      const fileName = `${currentBookingId}_${Date.now()}.${fileExt}`;
-      const filePath = `receipts/${fileName}`;
-
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('payments')
-        .upload(filePath, receiptRawFile);
-
-      if (uploadError) throw uploadError;
-
-      // 2. Get Public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('payments')
-        .getPublicUrl(filePath);
-
-      // 3. Update Firestore
-      const bookingRef = doc(db, "bookings", currentBookingId);
-      await updateDoc(bookingRef, {
-        paymentStatus: "pending_review",
-        paymentMethod: "manual",
-        receiptUrl: publicUrl,
-        receiptUploadedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
-
-      try {
-        if (generatedTicketUrl) {
-          const url = `${window.location.origin}/ticket/${generatedTicketUrl}`;
-          const qrDataUrl = await QRCode.toDataURL(url, { width: 256, margin: 2 });
-          setQrCodeDataUrl(qrDataUrl);
-        }
-      } catch (err) { console.error('QR Generate Error', err); }
-
-      setShowManualPayment(false);
-      setPaymentSuccess(true);
-      setReceiptFile(null);
-      setReceiptRawFile(null);
-      toast.success("Chek muvaffaqiyatli yuklandi. Admin tasdiqlashini kuting.");
-    } catch (error) {
-      console.error("Receipt upload failed:", error);
-      toast.error("Chekni yuklashda xatolik yuz berdi. Iltimos qaytadan urunib ko'ring.");
-    } finally {
-      setUploadingReceipt(false);
-    }
-  };
 
   const handleLogoClick = () => {
     const now = Date.now();
@@ -1898,30 +1835,6 @@ export default function Home() {
             </motion.button>
           )}
 
-          {manualEnabled && (
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => handleManualPayment('manual')}
-              disabled={paymentMethodLoading !== null}
-              className="w-full flex items-center justify-between p-6 rounded-2xl bg-gray-50 dark:bg-[#0B1120] border border-gray-200 dark:border-white/10 hover:border-emerald-500 transition-all group h-auto disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-emerald-500/10 rounded-xl flex items-center justify-center">
-                  <Armchair className="w-6 h-6 text-emerald-500" />
-                </div>
-                <div className="text-left">
-                  <div className="font-bold text-gray-900 dark:text-white">{t('home.payment.manual')}</div>
-                  <div className="text-xs text-gray-500">{t('home.payment.manual_desc')}</div>
-                </div>
-              </div>
-              {paymentMethodLoading === 'manual' ? (
-                <Loader2 className="w-5 h-5 text-emerald-500 animate-spin" />
-              ) : (
-                <ChevronDown className="w-5 h-5 text-gray-400 rotate-[-90deg]" />
-              )}
-            </motion.button>
-          )}
 
           {!stripeEnabled && !manualEnabled && (
             <div className="p-8 text-center text-gray-500">
@@ -1931,103 +1844,6 @@ export default function Home() {
         </div>
       </Modal>
 
-      {/* Manual Payment Modal */}
-      <Modal
-        isOpen={showManualPayment}
-        onClose={() => setShowManualPayment(false)}
-        title={selectedPaymentMethod === 'payme' ? 'Payme orqali to\'lov' : selectedPaymentMethod === 'click' ? 'Click orqali to\'lov' : 'Karta orqali to\'lov'}
-      >
-        <div className="space-y-6">
-          <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 p-4 rounded-xl">
-            <p className="text-sm text-amber-700 dark:text-amber-400 font-medium text-center">
-              {selectedPaymentMethod === 'payme' 
-                ? `Payme ilovasida "Karta raqamiga o'tkazma" bo'limiga o'ting, quyidagi raqamga ${pendingBooking && formatPrice(pendingBooking.ride.price)} o'tkazing va chek rasmiga olib yuklang.`
-                : selectedPaymentMethod === 'click'
-                ? `Click ilovasida quyidagi karta raqamiga ${pendingBooking && formatPrice(pendingBooking.ride.price)} o'tkazing va to'lov chekini rasmga olib yuklang.`
-                : `Quyidagi karta raqamiga ${pendingBooking && formatPrice(pendingBooking.ride.price)} o'tkazing va chekni yuklang.`
-              }
-            </p>
-          </div>
-
-          <div className="p-6 bg-gray-50 dark:bg-[#111827] rounded-2xl border border-gray-200 dark:border-white/5 text-center">
-            <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">Karta raqami</div>
-            <div className="text-2xl font-mono font-bold text-gray-900 dark:text-white tracking-wider mb-1">
-              {adminCardNumber || '8600 0000 0000 0000'}
-            </div>
-            {adminCardOwner && (
-              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                {adminCardOwner}
-              </div>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                navigator.clipboard.writeText(adminCardNumber);
-                toast.success("Karta raqami nusxalandi!");
-              }}
-              className="mt-2 text-emerald-500 hover:bg-emerald-500/10"
-            >
-              Nusxa olish
-            </Button>
-          </div>
-
-          {adminSupportPhone && (
-            <div className="text-center">
-              <p className="text-xs text-gray-500 mb-1">Savollar bo'yicha:</p>
-              <a href={`tel:${adminSupportPhone}`} className="text-sm font-bold text-emerald-500 hover:underline">
-                {adminSupportPhone}
-              </a>
-            </div>
-          )}
-
-          {timer > 0 ? (
-            <div className="text-center py-4">
-              <div className="text-sm text-gray-500 mb-1">Chek yuklash imkoniyati ochilishiga:</div>
-              <div className="text-3xl font-bold text-emerald-500">
-                {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">To'lov cheki (rasm)</label>
-                <div className="relative">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleReceiptUpload}
-                    className="hidden"
-                    id="receipt-upload"
-                  />
-                  <label
-                    htmlFor="receipt-upload"
-                    className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 dark:border-white/10 rounded-2xl cursor-pointer hover:border-emerald-500 transition-all bg-gray-50 dark:bg-[#111827]"
-                  >
-                    {receiptFile ? (
-                      <img src={receiptFile} alt="Receipt" className="h-full w-full object-contain p-2" />
-                    ) : (
-                      <>
-                        <Camera className="w-8 h-8 text-gray-400 mb-2" />
-                        <span className="text-sm text-gray-500">Chekni tanlang</span>
-                      </>
-                    )}
-                  </label>
-                </div>
-              </div>
-
-              <Button
-                disabled={!receiptFile}
-                loading={uploadingReceipt}
-                onClick={submitReceipt}
-                className="w-full py-4"
-              >
-                Tasdiqlash uchun yuborish
-              </Button>
-            </div>
-          )}
-        </div>
-      </Modal>
 
       <Modal
         isOpen={paymentSuccess}
