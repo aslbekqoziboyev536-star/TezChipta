@@ -10,9 +10,6 @@ import { OAuth2Client } from "google-auth-library";
 import mongoose from "mongoose";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import admin from "firebase-admin";
-import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
-import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { initializeApp as initializeClientApp } from "firebase/app";
 import { getFirestore as getClientFirestore, doc as clientDoc, getDoc as getClientDoc, updateDoc as updateClientDoc, collection as clientCollection, addDoc as addClientDoc, setDoc as setClientDoc, query as clientQuery, where as clientWhere, getDocs as getClientDocs, deleteDoc as deleteClientDoc } from "firebase/firestore";
 import fs from "fs";
@@ -23,7 +20,7 @@ import QRCode from "qrcode";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { GoogleGenAI } from "@google/genai";
-
+import { createClient } from "@supabase/supabase-js";
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY!
 });
@@ -58,6 +55,22 @@ const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
 if (!stripe) {
   console.warn("WARNING: STRIPE_SECRET_KEY is missing. Payment features will not work.");
+}
+
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SERVICE_ROLE_KEY;
+
+let supabaseAdmin: any = null;
+if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+  supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  });
+  console.log("Supabase Admin initialized");
+} else {
+  console.warn("Supabase Admin credentials missing, some admin functions will not work.");
 }
 
 // --- Metrics & Analytics ---
@@ -95,44 +108,13 @@ if (fs.existsSync(firebaseConfigPath)) {
   };
 }
 
-// Initialize Firebase Admin
-let firebaseApp: admin.app.App;
-try {
-  const projectId = firebaseConfig.projectId || process.env.FIREBASE_PROJECT_ID;
-
-  if (!admin.apps.length) {
-    if (projectId) {
-      firebaseApp = admin.initializeApp({
-        projectId: projectId
-      });
-      console.log("Firebase Admin initialized with Project ID:", projectId);
-    } else {
-      console.warn("Firebase Project ID not found. Attempting default initialization...");
-      firebaseApp = admin.initializeApp();
-    }
-  } else {
-    firebaseApp = admin.app();
-  }
-} catch (error) {
-  console.error("Firebase Admin initialization error:", error);
-  firebaseApp = admin.apps.length ? admin.app() : (null as any);
-}
-
-let db: any;
-let auth: any;
 let clientDb: any;
 
 try {
   const clientApp = initializeClientApp(firebaseConfig);
   clientDb = getClientFirestore(clientApp, firebaseConfig.firestoreDatabaseId);
-
-  if (firebaseApp) {
-    const databaseId = firebaseConfig.firestoreDatabaseId || process.env.FIRESTORE_DATABASE_ID;
-    db = databaseId ? getAdminFirestore(firebaseApp, databaseId) : getAdminFirestore(firebaseApp);
-    auth = getAdminAuth(firebaseApp);
-  }
 } catch (error) {
-  console.error("Firestore/Auth initialization error:", error);
+  console.error("Firestore initialization error:", error);
 }
 
 const client = new OAuth2Client(GOOGLE_CLIENT_ID);
@@ -140,12 +122,6 @@ const busLocations: Record<string, { lat: number, lng: number, speed?: number, t
 const INTERNAL_SECRET = "ai_studio_server_secret_2024";
 
 const verifyFirebaseIdToken = async (idToken: string) => {
-  try {
-    if (auth) return await auth.verifyIdToken(idToken);
-  } catch (error: any) {
-    console.warn("Firebase Admin verifyIdToken failed, falling back to REST API");
-  }
-
   if (!firebaseConfig.apiKey) throw new Error("Firebase API Key missing");
 
   const response = await axios.post(
@@ -190,9 +166,9 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
       return next();
     }
 
-    if (!db) throw new Error("Firestore not initialized");
-    const userDoc = await db.collection('users').doc(decodedToken.uid).get();
-    if (userDoc.data()?.role === 'admin') {
+    if (!clientDb) throw new Error("Firestore not initialized");
+    const userDoc = await getClientDoc(clientDoc(clientDb, 'users', decodedToken.uid));
+    if (userDoc.exists() && userDoc.data()?.role === 'admin') {
       req.user = decodedToken;
       return next();
     }
@@ -483,11 +459,11 @@ async function startServer() {
       const dateStr = new Date().toISOString().split('T')[0];
       const cacheId = `${dateStr}_${language}`;
 
-      if (!db) throw new Error("Firestore not initialized");
-      const cacheRef = db.collection('stats_ai_cache').doc(cacheId);
-      const cacheDoc = await cacheRef.get();
+      if (!clientDb) throw new Error("Firestore not initialized");
+      const cacheRef = clientDoc(clientDb, 'stats_ai_cache', cacheId);
+      const cacheDoc = await getClientDoc(cacheRef);
 
-      if (cacheDoc.exists) {
+      if (cacheDoc.exists()) {
         return res.json({ analysis: cacheDoc.data()?.result });
       }
 
@@ -504,21 +480,22 @@ async function startServer() {
         1. Growth metrics summary.
         2. Anomaly detection (e.g., if bookings ratio is abnormal).
         3. Revenue forecast or growth potential.
+        4. Key areas for improvement.
         Keep it highly professional, concise (3-4 sentences), and actionable.
       `;
 
-      const response = await ai.models.generateContent({
+      const aiResponse = await ai.models.generateContent({
         model: "gemini-2.0-flash",
         contents: statsSummary,
       });
 
-      await cacheRef.set({
-        result: response.text,
+      await setClientDoc(cacheRef, {
+        result: aiResponse.text,
         timestamp: new Date().toISOString(),
         language
       });
 
-      res.json({ analysis: response.text });
+      res.json({ analysis: aiResponse.text });
     } catch (error: any) {
       console.error("AI Analysis error details:", error);
       res.status(500).json({ error: "AI failed", details: error.message });
@@ -529,17 +506,38 @@ async function startServer() {
     const { uid } = req.body;
     if (!uid) return res.status(400).json({ error: "Foydalanuvchi UID talab qilinadi" });
     try {
-      if (!auth) throw new Error("Firebase Auth not initialized");
-      const userToAuth = await auth.getUser(uid);
-      if (ADMIN_EMAILS.includes(userToAuth.email?.toLowerCase() || '')) return res.status(403).json({ error: "Adminni o'chirib bo'lmaydi" });
-      await auth.deleteUser(uid);
-      await deleteClientDoc(clientDoc(clientDb, 'users', uid));
-      const driversRef = clientCollection(clientDb, 'drivers');
-      const driverQuerySnapshot = await getClientDocs(clientQuery(driversRef, clientWhere('uid', '==', uid)));
-      for (const driverDoc of driverQuerySnapshot.docs) await deleteClientDoc(driverDoc.ref);
+      if (!supabaseAdmin) throw new Error("Supabase Admin not initialized");
+      
+      // Since we don't have user info natively in Supabase Admin without a fetch, we try to check admin status
+      const { data: userToAuth, error: authError } = await supabaseAdmin.auth.admin.getUserById(uid);
+      if (userToAuth && userToAuth.user) {
+         if (ADMIN_EMAILS.includes(userToAuth.user.email?.toLowerCase() || '')) {
+             return res.status(403).json({ error: "Adminni o'chirib bo'lmaydi" });
+         }
+      }
+
+      // Delete from Supabase Auth
+      const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(uid);
+      if (deleteError) throw deleteError;
+
+      // Delete from Firestore
+      try {
+        await deleteClientDoc(clientDoc(clientDb, 'users', uid));
+      } catch (firestoreErr: any) {
+        console.warn("Firestore user document deletion failed (might be expected):", firestoreErr.message);
+      }
+      
+      try {
+        const driversRef = clientCollection(clientDb, 'drivers');
+        const driverQuerySnapshot = await getClientDocs(clientQuery(driversRef, clientWhere('uid', '==', uid)));
+        for (const driverDoc of driverQuerySnapshot.docs) await deleteClientDoc(driverDoc.ref);
+      } catch (firestoreErr: any) {
+         console.warn("Firestore drivers deletion failed (might be expected):", firestoreErr.message);
+      }
+
       res.json({ success: true, message: "Foydalanuvchi to'liq o'chirildi" });
     } catch (error: any) {
-      console.error("Error deleting user:", error);
+      console.error("Error deleting user via Supabase:", error);
       res.status(500).json({ error: error.message });
     }
   });

@@ -84,8 +84,16 @@ service cloud.firestore {
     // =========================
     match /drivers/{driverId} {
 
-      allow read: if isAuth();
+      allow read: if true;
 
+      allow write: if isAdmin();
+    }
+
+    // =========================
+    // FAQS
+    // =========================
+    match /faqs/{id} {
+      allow read: if true;
       allow write: if isAdmin();
     }
 
@@ -141,10 +149,10 @@ service cloud.firestore {
     }
 
     // =========================
-    // SETTINGS (admin only)
+    // SETTINGS
     // =========================
     match /settings/{id} {
-      allow read: if isAuth();
+      allow read: if true;
       allow write: if isAdmin();
     }
 

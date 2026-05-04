@@ -879,7 +879,7 @@ export default function Home() {
               transition={{ delay: 0.3 }}
               className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-4"
             >
-              <span className="text-amber-500">{t('home.hero.highlight')}</span>{' '}
+              <span className="text-amber-500">{t('home.hero.highlight')}</span>{' '} <br></br>
               <span className="text-gray-900 dark:text-white">{t('home.hero.action')}</span>
             </motion.h2>
             <motion.p 

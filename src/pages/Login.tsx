@@ -31,6 +31,15 @@ export default function Login() {
   const { loading, error, execute, reset } = useAsync();
 
   useEffect(() => {
+    if (location.search.includes('confirmedemail')) {
+      toast.success("Email muvaffaqiyatli tasdiqlandi! Endi tizimga kirishingiz mumkin.", {
+        duration: 6000
+      });
+      window.history.replaceState({}, document.title, location.pathname);
+    }
+  }, [location]);
+
+  useEffect(() => {
     if (user) {
       navigate('/');
     }

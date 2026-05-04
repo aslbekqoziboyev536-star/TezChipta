@@ -148,33 +148,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        const sbUser = session.user;
-        const userDocRef = doc(db, 'users', sbUser.id);
-        
-        // Parallel fetch/sync for Supabase users
-        const docSnap = await getDoc(userDocRef);
-        if (!docSnap.exists()) {
-          await setDoc(userDocRef, {
-            name: sbUser.user_metadata.full_name || 'User',
-            email: sbUser.email,
-            role: 'user',
-            isProfileComplete: false,
-            createdAt: new Date().toISOString()
-          });
-        }
-        
-        // Update state
-        setUser({
-          id: sbUser.id,
-          name: sbUser.user_metadata.full_name || 'User',
-          email: sbUser.email || '',
-          role: 'user', // Default or fetch from doc
-          isProfileComplete: docSnap.exists() ? docSnap.data().isProfileComplete : false
-        } as User);
-        setLoading(false);
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
+      if (event === 'SIGNED_OUT') {
+        // Let Firebase handle the user state.
       }
     });
 
@@ -220,8 +195,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
+        if (error.message.includes('Email not confirmed')) {
+          throw new Error("Iltimos, avval elektron pochtangizni tasdiqlang!");
+        }
         // If Supabase fails, try Firebase fallback for older users
         console.log("Supabase login failed, trying Firebase fallback...");
+        await signInWithEmailAndPassword(auth, email, pass);
+      } else {
+        // If Supabase login succeeds, we MUST also login to Firebase
         await signInWithEmailAndPassword(auth, email, pass);
       }
     } catch (error) {
@@ -232,33 +213,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const registerWithEmail = async (email: string, pass: string, name: string) => {
     try {
-      // Use Supabase for registration to support email confirmation
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password: pass,
-        options: {
-          data: {
-            full_name: name,
-          },
-          emailRedirectTo: `${window.location.origin}/successful`
+      // 1. Firebase Auth Registration
+      let firebaseUid = '';
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+        firebaseUid = userCredential.user.uid;
+        await updateProfile(userCredential.user, { displayName: name });
+      } catch (fbError: any) {
+        if (fbError.code === 'auth/email-already-in-use') {
+          throw new Error("Ushbu email allaqachon ro'yxatdan o'tgan.");
         }
-      });
+        throw fbError;
+      }
 
-      if (error) throw error;
-      
-      // Still create a document in Firestore to keep the app functional
-      if (data.user) {
-        await setDoc(doc(db, 'users', data.user.id), {
+      // 2. Set Firestore document using Firebase UID
+      try {
+        await setDoc(doc(db, 'users', firebaseUid), {
           name,
           email,
           role: 'user',
           isProfileComplete: false,
           createdAt: new Date().toISOString()
         });
+      } catch (dbError) {
+        console.error("Firestore user doc creation failed:", dbError);
       }
+
+      // 3. Supabase Auth Registration for Email Link
+      const { error } = await supabase.auth.signUp({
+        email,
+        password: pass,
+        options: {
+          data: {
+            full_name: name,
+          },
+          emailRedirectTo: `${window.location.origin}/login?confirmedemail`
+        }
+      });
+
+      if (error) throw error;
       
-      // If email confirmation is enabled, Supabase won't sign in the user immediately.
-      // We will show a success message in the component.
+      // 4. Log out of Firebase immediately so they are forced to confirm via email first
+      await signOut(auth);
+      
     } catch (error) {
       console.error("Registration failed:", error);
       throw error;
